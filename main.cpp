@@ -4,7 +4,9 @@
 #include <vector>
 #include <sstream>
 #include <unordered_map>
+#include <list>
 
+#define MAGENTA "\x1b[35m"
 #define GOLD "\x1b[33m"
 #define BRONZE "\x1b[30m"
 #define RESET "\x1b[0m"
@@ -50,6 +52,8 @@ std::ostream& operator<<(std::ostream& out, const Card& obj)
 
 class PlayerCard: public Card
 {
+    static int playerCount;
+    const int playerId;
     int attackOVR;
     int defenseOVR;
     int quickSellValue;
@@ -61,16 +65,21 @@ public:
     friend std::istream& operator>>(std::istream& in, PlayerCard& obj);
     friend std::ostream& operator<<(std::ostream& out, const PlayerCard& obj);
     ~PlayerCard() = default;
+
+    const int getPlayerId();
+    int calcOVR() const;
 };
 
-PlayerCard::PlayerCard(std::string name, int attackOVR, int defenseOVR, int quickSellValue) : Card(name)
+int PlayerCard::playerCount = 1;
+
+PlayerCard::PlayerCard(std::string name, int attackOVR, int defenseOVR, int quickSellValue) : Card(name), playerId(playerCount++)
 {
     this->attackOVR = attackOVR;
     this->defenseOVR = defenseOVR;
     this->quickSellValue = quickSellValue;
 }
 
-PlayerCard::PlayerCard(const PlayerCard& obj) : Card(obj)
+PlayerCard::PlayerCard(const PlayerCard& obj) : Card(obj), playerId(playerCount++)
 {
     this->attackOVR = obj.attackOVR;
     this->defenseOVR = obj.defenseOVR;
@@ -129,7 +138,9 @@ std::ostream& operator<<(std::ostream& out, const PlayerCard& obj)
 {
     std::string color = "";
     int ovr = std::max(obj.attackOVR, obj.defenseOVR);
-    if(ovr >= 75)
+    if(ovr >= 85)
+        color = MAGENTA;
+    else if(ovr >= 75)
         color = GOLD;
     else if(ovr <= 65)
         color = BRONZE;
@@ -139,6 +150,10 @@ std::ostream& operator<<(std::ostream& out, const PlayerCard& obj)
     out << color << "Quick sell value: " << RESET << obj.quickSellValue << '\n';
     return out;
 }
+
+const int PlayerCard::getPlayerId(){return this->playerId;}
+
+int PlayerCard::calcOVR() const{return std::max(this->attackOVR, this->defenseOVR);}
 
 class UseCard : public Card
 {
@@ -202,6 +217,104 @@ public:
     ~TeamUseCard() = default;
 };
 
+TeamUseCard::TeamUseCard(std::string name, int duration, int statsBoost, std::string type) : UseCard(name, duration)
+{
+    this->statsBoost = statsBoost;
+    this->type = type;
+}
+
+TeamUseCard::TeamUseCard(const TeamUseCard& obj) : UseCard(obj)
+{
+    this->statsBoost = obj.statsBoost;
+    this->type = obj.type;
+}
+
+TeamUseCard& TeamUseCard::operator=(const TeamUseCard& obj)
+{
+    if(this != &obj)
+    {
+        UseCard::operator=(obj);
+        this->statsBoost = obj.statsBoost;
+        this->type = obj.type;
+    }
+    return *this;
+}
+
+std::istream& operator>>(std::istream& in, TeamUseCard& obj)
+{
+    in >> (UseCard&)obj;
+    std::cout << "Insert stats boost: ";
+    obj.statsBoost = readInt(in);
+    std::cout << "Insert type: ";
+    std::getline(in, obj.type);
+    return in;
+}
+
+std::ostream& operator<<(std::ostream& out, const TeamUseCard& obj)
+{
+    out << (UseCard&)obj;
+    out << "Stats boost: " << obj.statsBoost << '\n';
+    out << "Type: " << obj.type << '\n';
+    return out;
+}
+
+class Database
+{
+    static Database* instance;
+    // std::vector<const PlayerCard*> specialPlayers;
+    std::vector<const PlayerCard*> goldPlayers;
+    std::vector<const PlayerCard*> silverPlayers;
+    std::vector<const PlayerCard*> bronzePlayers;
+    Database(std::vector<const PlayerCard*> specialPlayers = {}, std::vector<const PlayerCard*> goldPlayers = {}, 
+            std::vector<const PlayerCard*> silverPlayers = {}, std::vector<const PlayerCard*> bronzePlayers = {});
+    Database(const Database& obj) = delete;
+    Database& operator=(const Database& obj) = delete;
+    void addPlayer(const PlayerCard& player);
+    void readPlayers();
+public:
+    std::vector<const PlayerCard*> specialPlayers;
+    static Database* getInstance();
+    const std::vector<const PlayerCard*> getSpecialPlayers() const;
+    const std::vector<const PlayerCard*> getGoldPlayers() const;
+    const std::vector<const PlayerCard*> getSilverPlayers() const;
+    const std::vector<const PlayerCard*> getBronzePlayers() const;
+};
+
+Database* Database::instance = nullptr;
+
+Database::Database(std::vector<const PlayerCard*> specialPlayers, std::vector<const PlayerCard*> goldPlayers, 
+            std::vector<const PlayerCard*> silverPlayers, std::vector<const PlayerCard*> bronzePlayers)
+{
+    this->specialPlayers = specialPlayers;
+    this->goldPlayers = goldPlayers;
+    this->silverPlayers = silverPlayers;
+    this->bronzePlayers = bronzePlayers;
+}
+
+Database* Database::getInstance()
+{
+    if(instance == nullptr){
+        instance = new Database();
+        instance->readPlayers();
+    }
+    return instance;
+}
+
+void Database::addPlayer(const PlayerCard& player)
+{
+    int ovr = player.calcOVR();
+    if(ovr >= 85)
+        this->specialPlayers.push_back(&player);
+    else if(ovr >= 75)
+        this->goldPlayers.push_back(&player);
+    else if(ovr >= 65)
+        this->silverPlayers.push_back(&player);
+    else
+        this->bronzePlayers.push_back(&player);
+}
+
+
+
 std::vector<std::string> lineRead(std::string line)
 {
     std::vector<std::string> temp;
@@ -240,8 +353,9 @@ std::pair<int, int> findBestOVR(std::vector<std::string>& playerStats)
     return maxOvrs;
 }
 
-// Reading from the .csv file players stats
-void readPlayers()
+
+//reading from .csv file the players stats
+void Database::readPlayers()
 {
     std::ifstream fin("players_fifa23_cleaned.csv");
     std::string x;
@@ -249,21 +363,37 @@ void readPlayers()
     int attackOVR, defenseOVR;
     std::getline(fin, x);
     int i = 0;
+    PlayerCard* tempPlayer;
     while(std::getline(fin, x))
     {
-        if(i == 15)
-            break;
-        i++;
         playerStats = lineRead(x);
-        std::cout << findBestOVR(playerStats).first << " " << findBestOVR(playerStats).second <<  " " << playerStats[23] << '\n';
+        // std::cout << findBestOVR(playerStats).first << " " << findBestOVR(playerStats).second <<  " " << playerStats[23] << '\n';
+        tempPlayer = new PlayerCard(playerStats[0], findBestOVR(playerStats).first, findBestOVR(playerStats).second, stoi(playerStats[23]));
+        this->addPlayer(*tempPlayer);
     }
+    fin.close();
 }
+
+const std::vector<const PlayerCard*> Database::getSpecialPlayers() const{return this->specialPlayers;}
+
+const std::vector<const PlayerCard*> Database::getGoldPlayers() const{return this->goldPlayers;}
+
+const std::vector<const PlayerCard*> Database::getSilverPlayers() const{return this->silverPlayers;}
+
+const std::vector<const PlayerCard*> Database::getBronzePlayers() const{return this->bronzePlayers;}
 
 int main() {
     // readPlayers();
     PlayerCard b("Cristiano Ronaldo", 92, 32, 1900);
-    PlayerCard c;
-    // std::cin >> c;
-    std::cout << b;
+    UseCard c("salas", 12);
+    // TeamUseCard d("sadsada", 15, 20, "Attack"), e(d);
+    // std::cout << b;
+    Database* d;
+    d = d->getInstance();
+    for(int i = 0; i < d->getBronzePlayers().size(); i++)
+        std::cout << *d->getBronzePlayers()[i] << '\n';
     return 0;
 }
+
+// to do list: trebuie clasa GAME si clasa TEAM 
+// de altfel nu ai facut PlayerUseCard
