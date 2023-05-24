@@ -5,7 +5,10 @@
 #include <sstream>
 #include <unordered_map>
 #include <list>
+#include <random>
+#include <unistd.h>
 
+#define RED "\x1b[31m"
 #define MAGENTA "\x1b[35m"
 #define GOLD "\x1b[33m"
 #define BRONZE "\x1b[30m"
@@ -22,6 +25,8 @@ public:
     friend std::istream& operator>>(std::istream& in, Card& obj);
     friend std::ostream& operator<<(std::ostream& out, const Card& obj);
     virtual ~Card() = default;
+
+    std::string getName() const { return name; }
 };
 
 Card::Card(const std::string& name): name(name){}
@@ -66,6 +71,8 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const PlayerCard& obj);
     ~PlayerCard() = default;
 
+    int getAttackOVR() const { return attackOVR; }
+    int getDefenseOVR() const { return defenseOVR; }
     const int getPlayerId() const;
     int calcOVR() const;
 };
@@ -514,16 +521,218 @@ class Game
 {
     std::vector<const PlayerCard*> lineup1;
     std::vector<const PlayerCard*> lineup2;
+    int homeScore;
+    int awayScore;
+    int minute;
 public:
+    Game(std::vector<const PlayerCard*> lineup1 = {}, std::vector<const PlayerCard*> lineup2 = {},
+        int homeScore = 0, int awayScore = 0, int minute = 0);
+    Game(const Game& obj);
+    Game& operator=(const Game& obj);
+    friend std::istream& operator>>(std::istream& in, Game& obj);
+    friend std::ostream& operator<<(std::ostream& out, const Game& obj);
+    ~Game() = default;
 
+    int getTeamAttackOVR(std::vector<const PlayerCard*> lineup);
+    int getTeamDefenseOVR(std::vector<const PlayerCard*> lineup);
+    std::string eventDraw(int team, int event, int minute);
+    static std::string getSpaces(std::string temp);
+    void setLineups(std::vector<const PlayerCard*> lineup1, std::vector<const PlayerCard*> lineup2);
     int simGame(); //returns 0 = team1 victory, 1 = draw, 2 = team2 victory
 };
+
+Game::Game(std::vector<const PlayerCard*> lineup1, std::vector<const PlayerCard*> lineup2, int homeScore, int awayScore,
+            int minute)
+{
+    this->lineup1 = lineup1;
+    this->lineup2 = lineup2;
+    this->homeScore = homeScore;
+    this->awayScore = awayScore;
+    this->minute = minute;
+}
+
+Game::Game(const Game& obj)
+{
+    this->lineup1 = obj.lineup1;
+    this->lineup2 = obj.lineup2;
+    this->homeScore = obj.homeScore;
+    this->awayScore = obj.awayScore;
+    this->minute = obj.minute;
+}
+
+Game& Game::operator=(const Game& obj)
+{
+    if(this != &obj)
+    {
+        this->lineup1 = obj.lineup1;
+        this->lineup2 = obj.lineup2;
+        this->homeScore = obj.homeScore;
+        this->awayScore = obj.awayScore;
+        this->minute = obj.minute;
+    }
+    return *this;
+}
+
+int Game::getTeamAttackOVR(std::vector<const PlayerCard*> lineup)
+{
+    int total = 0;
+    for(int i = 0; i < lineup.size(); i++)
+        total += lineup[i]->getAttackOVR();
+    return total;
+}
+
+int Game::getTeamDefenseOVR(std::vector<const PlayerCard*> lineup)
+{
+    int total = 0;
+    for(int i = 0; i < lineup.size(); i++)
+        total += lineup[i]->getDefenseOVR();
+    return total;
+}
+
+std::string Game::getSpaces(std::string temp){
+    std::string result = "";
+    for(int i = 0; i < 50 - temp.length(); i++)
+        result += " ";
+    return result;
+}
+
+std::ostream& operator<<(std::ostream& out, const Game& obj)
+{
+    out << "Your lineup:" << Game::getSpaces("Your lineup:") << "Opponent lineup:\n";
+    for(int i = 0; i < obj.lineup1.size(); i++)
+        out << obj.lineup1[i]->getName() << Game::getSpaces(obj.lineup1[i]->getName()) << obj.lineup2[i]->getName() <<'\n';
+    out << "\n";
+    return out;
+}
+
+void Game::setLineups(std::vector<const PlayerCard*> lineup1, std::vector<const PlayerCard*> lineup2)
+{
+    this->lineup1 = lineup1;
+    this->lineup2 = lineup2;
+}
+
+void gameDraw(int scoreHome, int scoreAway)
+{
+    std::cout << "\tYour Team\t" << scoreHome << " - " << scoreAway << "\t\tOpponent\n";
+
+}
+
+std::string Game::eventDraw(int team, int event, int minute) // 1 - Team 1, 2 - Team 2 || 1 - GOAL, 2 - YELLOW CARD, 3 - RED CARD
+{
+    std::string temp = "|";
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    int teamSize;
+    if(team == 1)
+        teamSize = this->lineup1.size() - 1;
+    else
+        teamSize = this->lineup2.size() - 1;
+    std::uniform_int_distribution<int> playerNr(0, teamSize);
+    int player = playerNr(rng);
+    if(team < 1 || team > 2) return "";
+    if(event > 3 || event < 1) return "";
+    if(team == 1)
+    {
+        temp += std::to_string(minute);
+        if(event == 1)
+        {
+            this->homeScore++;
+            temp += " - GOAL: ";
+        }else if(event == 2)
+        {
+            temp += " - YELLOW CARD: ";
+        }
+        else{
+            temp += " - RED CARD: ";
+        }
+        temp += this->lineup1[player]->getName();
+        if(event == 3)
+            this->lineup1.erase(this->lineup1.begin() + player);
+    }
+    else if(team == 2)
+    {   
+        temp += "                                   ";
+        temp += std::to_string(minute);
+        if(event == 1)
+        {
+            this->awayScore++;
+            temp += " - GOAL: ";
+        }else if(event == 2)
+        {
+            temp += " - YELLOW CARD: ";
+        }
+        else{
+            temp += " - RED CARD: ";
+        }
+        temp += this->lineup2[player]->getName();
+        if(event == 3)
+            this->lineup1.erase(this->lineup1.begin() + player);
+    }
+    for(int i = temp.length(); i < 68; i++)
+        temp += " ";
+    temp += "|\n";
+    return temp;
+}
+// you need to keep in mind the 2 yellow cards add to a red card
+int Game::simGame()
+{
+    if(this->lineup1.size() != 11 && this->lineup2.size() != 11)
+        return -1;
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    // std::uniform_int_distribution<double> eventType(0.0, 1.0);
+    std::string events = "";
+    // calc chances (team1 attack and defense ovr and then for team2)
+    double scoringChancesForTeamA;
+    double scoringChancesForTeamB;
+    while(minute < 93)
+    {
+        scoringChancesForTeamA = 1.0 / (1.0 + std::exp((this->getTeamDefenseOVR(lineup2) - this->getTeamAttackOVR(lineup1)) / 10.0));
+        scoringChancesForTeamB = 1.0 / (1.0 + std::exp((this->getTeamDefenseOVR(lineup1) - this->getTeamAttackOVR(lineup2)) / 10.0));
+        system("clear");
+        std::cout << "+-------------------------------------------------------------------+\n";
+        std::cout << "|           YOUR TEAM           " << this->homeScore << " - " << this->awayScore << "            OPPONENT TEAM      |" << std::endl;
+        std::cout << "|                                " << this->minute << "                                 |\n";
+        std::cout << "+-------------------------------------------------------------------+\n";
+        if(minute == 23)
+            events += this->eventDraw(2, 1, this->minute);
+        std::cout << events;
+        if(events.length() > 1)
+            std::cout << "+-------------------------------------------------------------------+\n";
+        // usleep(100000);
+        this->minute++;
+    }
+    return 0;
+}
 
 int main() {
     // TeamUseCard d("sadsada", 15, 20, "Attack"), e(d);
     Database* d;
     d = d->getInstance();
-    for(int i = 0; i < d->getBronzePlayers().size(); i++)
-        std::cout << *d->getBronzePlayers()[i] << '\n';
+    // std::unordered_map<int, const PlayerCard*> team1;
+    // std::unordered_map<int, const PlayerCard*> team2;
+    // std::vector<const PlayerCard*> lineup1;
+    // std::vector<const PlayerCard*> lineup2;
+    // for(int i = 0; i < 22; i++)
+    // {
+    //     if(i < 11){
+    //         team1[i] = d->specialPlayers[i];
+    //         lineup1.push_back(team1[i]);
+    //     }
+    //     else{
+    //         team2[i-11] = d->specialPlayers[i];
+    //         lineup2.push_back(team2[i-11]);
+    //     }
+    // }
+    // Club club1(team1, lineup1), club2(team2, lineup2);
+    // Game game1(lineup1, lineup2);
+    // std::cout << "Lineup 1: " << game1.getTeamAttackOVR(lineup1) << " " << game1.getTeamDefenseOVR(lineup1) << '\n';
+    // std::cout << "Lineup 2: " << game1.getTeamAttackOVR(lineup2) << " " << game1.getTeamDefenseOVR(lineup2) << '\n';
+    // std::cout << chancesForTeamA << '\n';
+    // std::cout << chancesForTeamB << '\n';
+    // std::cout << game1;
+    // game1.simGame();
     return 0;
 }
+// NU UITA SA SCOTI DIN CLASA DATABASE VECTORUL DE LA PUBLIC
+// testeaza daca red card-ul iti va scoate playerul din lineup si din Club
