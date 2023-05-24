@@ -9,6 +9,9 @@
 #include <unistd.h>
 #include <typeinfo>
 #include <algorithm>
+#include <filesystem>
+#include <termios.h>
+#include <unistd.h>
 
 #define RED "\x1b[31m"
 #define MAGENTA "\x1b[35m"
@@ -454,11 +457,15 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const Club& obj);
     ~Club() = default;
 
+    void showLineup();
+    void showAllPlayers();
     std::string getName() const { return name; }
+    bool checkPlayerInClub(int playerId);
+    const std::vector<const PlayerCard*> getLineup() const {return lineup;}
     int getBudget() const { return budget; }
-    void addPlayer(const PlayerCard* player);
-    void addToLineup(int playerId);
-    void removeFromLineup(int playerId);
+    bool addPlayer(const PlayerCard* player);
+    bool addToLineup(int playerId);
+    bool removeFromLineup(int playerId);
 };
 
 Club::Club(std::string name, std::unordered_map<int, const PlayerCard*> allPlayers, std::vector<const PlayerCard*> lineup, 
@@ -506,7 +513,7 @@ std::istream& operator>>(std::istream& in, Club& obj)
         }
         catch(const std::invalid_argument& e)
         {
-            std::cout << e.what() << "Try again!\n";
+            std::cerr << e.what() << "Try again!\n";
         }
     }
     // std::cout << "Insert number of players: ";
@@ -528,16 +535,17 @@ std::istream& operator>>(std::istream& in, Club& obj)
 std::ostream& operator<<(std::ostream& out, const Club& obj)
 {
     out << "Club's name: " << obj.name << '\n';
-    out << "Players in club:\n";
-    for(auto player: obj.allPlayers)
-        out << player.second << '\n';
-    out << "Lineup:\n";
-    if(!obj.lineup.empty())
-        for(int i = 0; i < obj.lineup.size(); i++)
-            out << obj.lineup[i] << '\n';
+    out << "Players in club: "; 
+    if(!obj.allPlayers.empty())
+        std::cout << obj.allPlayers.size() << '\n';
     else
-        std::cout << "\tNo players yet!\n";
-    out << "Use cards in club:\n";
+        std::cout << "No players in club!\n";
+    out << "Lineup: ";
+    if(!obj.lineup.empty())
+        std::cout << obj.lineup.size() << '\n';
+    else
+        std::cout << "No players yet!\n";
+    out << "Use cards in club: ";
     if(!obj.useCards.empty())
         for(int i = 0; i < obj.useCards.size(); i++)
             out << obj.useCards[i] << '\n';
@@ -547,49 +555,75 @@ std::ostream& operator<<(std::ostream& out, const Club& obj)
     return out;
 }
 
-void Club::addPlayer(const PlayerCard* player)
+void Club::showLineup()
 {
-    if(this->allPlayers.find(player->getPlayerId()) == this->allPlayers.end())
+    if(!this->lineup.empty()){
+        for(int i = 0; i < this->lineup.size(); i++)
+            std::cout << this->lineup[i] << '\n';
+        std::cout << "Total attack OVR: " << Game::getTeamAttackOVR(this->lineup);
+        std::cout << "Total defense OVR: " << Game::getTeamDefenseOVR(this->lineup);
+    }
+}
+
+void Club::showAllPlayers()
+{
+    for(auto player: this->allPlayers)
+        std::cout << player.second << '\n';
+}
+
+bool Club::addPlayer(const PlayerCard* player)
+{
+    if(this->allPlayers.find(player->getPlayerId()) != this->allPlayers.end())
     {
         std::cout << "Player is already in this club!\n";
-        return;
+        return 0;
     }
     this->allPlayers[player->getPlayerId()] = player;
     std::cout << "Player has been added successfully!\n";
+    return 1;
 }
 
-void Club::addToLineup(int playerId)
+bool Club::addToLineup(int playerId)
 {
     if(this->lineup.size() == 11)
     {
         std::cout << "Lineup full!\n";
-        return;
+        return 0;
     }
     if(this->allPlayers.find(playerId) == this->allPlayers.end())
     {
         std::cout << "Player is not in the club!\n";
-        return;
+        return 0;
     }
     for(int i = 0; i < this->lineup.size(); ++i)
         if(this->lineup[i]->getPlayerId() == playerId)
         {
             std::cout << "Player is already in the lineup!\n";
-            return;
+            return 0;
         }
     this->lineup.push_back(this->allPlayers[playerId]);
     std::cout << "Player has been added to the lineup!\n";
+    return 1;
 }
 
-void Club::removeFromLineup(int playerId)
+bool Club::removeFromLineup(int playerId)
 {
     for(int i = 0; i < this->lineup.size(); ++i)
         if(this->lineup[i]->getPlayerId() == playerId)
         {
             this->lineup.erase(this->lineup.begin() + i);
             std::cout << "Player has been removed from the lineup!\n";
-            return;
+            return 1;
         }
     std::cout << "Player has not been found!\n";
+    return 0;
+}
+
+bool Club::checkPlayerInClub(int playerId)
+{
+    if(this->allPlayers.find(playerId) != this->allPlayers.end())
+        return true;
+    return false;
 }
 
 class Game
@@ -608,8 +642,8 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const Game& obj);
     ~Game() = default;
 
-    int getTeamAttackOVR(std::vector<const PlayerCard*> lineup);
-    int getTeamDefenseOVR(std::vector<const PlayerCard*> lineup);
+    static int getTeamAttackOVR(std::vector<const PlayerCard*> lineup);
+    static int getTeamDefenseOVR(std::vector<const PlayerCard*> lineup);
     std::string eventDraw(int team, int event, int minute);
     static std::string getSpaces(std::string temp);
     void setLineups(std::vector<const PlayerCard*> lineup1, std::vector<const PlayerCard*> lineup2);
@@ -879,12 +913,20 @@ std::ostream& operator<<(std::ostream& out, const Pack<T>& obj)
     return out;
 }
 
+bool endsWith(const std::string& str, const std::string& suffix) {
+    if (str.length() >= suffix.length()) {
+        return (str.substr(str.length() - suffix.length()) == suffix);
+    }
+    return false;
+}
+
 class Menu
 {
     static Menu* instance;
     static int nrOfInstances;
+    std::string filename;
     Club* club;
-    Menu();
+    Menu(Club* club = nullptr, std::string filename = "unknown");
     Menu(const Menu& obj) = delete;
     Menu& operator=(const Menu& obj) = delete;
 public:
@@ -892,14 +934,18 @@ public:
     ~Menu();
 
     void run();
+    void clubMenu();
+    void packMenu();
+    void gameMenu();
 };
 
 int Menu::nrOfInstances = 0;
 Menu* Menu::instance = nullptr;
 
-Menu::Menu()
+Menu::Menu(Club* club, std::string filename)
 {
-    
+    this->club = club;
+    this->filename = filename;
 }
 
 Menu* Menu::getInstance()
@@ -914,13 +960,249 @@ Menu* Menu::getInstance()
 Menu::~Menu(){
     nrOfInstances--;
     if(nrOfInstances == 0)
-        if(instance)
+        if(instance){
             delete instance;
+            //save data in filename
+        }
+}
+
+void waitForUserInput()
+{
+    // Wait for the user to press Enter
+    std::cout << "\nPress Enter to continue...";
+
+    // Disable terminal buffering
+    termios oldSettings, newSettings;
+    tcgetattr(STDIN_FILENO, &oldSettings);
+    newSettings = oldSettings;
+    newSettings.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newSettings);
+
+    // Read a single character
+    char ch;
+    std::cin.get(ch);
+
+    // Restore terminal settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldSettings);
+}
+
+void Menu::run(){
+    system("clear");
+    std::cout << "Insert a filename to save the game (it shall contain no spaces and end in .txt): ";
+    while(true){
+        try{
+            std::getline(std::cin, filename);
+            if(filename.find(" ") != std::string::npos)
+                throw std::runtime_error("Invalid filename (it contains spaces)!");
+            if(endsWith(filename, ".txt"))
+                break;
+            throw std::runtime_error("Invalid filename (it doesn't end in .txt)!");
+        }
+        catch(const std::runtime_error &e)
+        {
+            std::cerr << e.what() << '\n' << "Try again!\n";
+        }
+    }
+    if(!std::filesystem::exists(filename))
+    {
+        this->club = new Club();
+        std::cin >> *this->club;
+    }
+    int command;
+    bool running = true;
+    while(running)
+    {
+        system("clear");
+        std::cout << "1 - View club!\n";
+        std::cout << "2 - Open packs!\n"; // te va duce pe o pagina in care selectezi ce pack vrei sa cumperi (fiecare are afisat pretul, + bugetul tau)
+        std::cout << "3 - Play game!\n"; // pt asta va avea de selectat dificultatea
+        std::cout << "0 - Quit!\n";
+        command = readInt(std::cin);
+        switch(command)
+        {
+            case 1:{
+                this->clubMenu();
+                break;
+            }
+            case 2:{
+                this->packMenu();
+                break;
+            }
+            case 3:{
+                this->gameMenu();
+                break;
+            }
+            // case 4:{
+            //     break;
+            // }
+            // case 5:{
+            //     break;
+            // }
+            case 0:{
+                running = false;
+                break;
+            }
+            default:{
+                std::cout << "Try again!\n";
+                break;
+            }
+        }
+    }
+}
+
+void Menu::clubMenu()
+{
+    int command;
+    bool running = true;
+    while(running)
+    {
+        system("clear");
+        std::cout << "1 - Show club!\n";
+        std::cout << "2 - View all players!\n";
+        std::cout << "3 - View lineup!\n"; // in view lineup iti vezi si total attack ovr si total defense ovr
+        std::cout << "4 - Add to lineup!\n";
+        std::cout << "5 - Remove from lineup!\n";
+        std::cout << "0 - Quit!\n";
+        command = readInt(std::cin);
+        switch(command)
+        {
+            case 1:{
+                system("clear");
+                std::cout << *this->club << '\n';
+                waitForUserInput();
+                break;
+            }
+            case 2:{
+                system("clear");
+                this->club->showAllPlayers();
+                waitForUserInput();
+                break;
+            }
+            case 3:{
+                system("clear");
+                if(this->club->getLineup().empty())
+                {
+                    std::cout << "No players in lineup!" << '\n';
+                }
+                else
+                    this->club->showLineup();
+                waitForUserInput();
+                break;
+            }
+            case 4:{
+                system("clear");
+                int playerId;
+                std::cout << "Give player id(or 0 - Back): ";
+                while(true){
+                    playerId = readInt(std::cin);
+                    if(playerId == 0)
+                        break;
+                    if(this->club->addToLineup(playerId) == true)
+                        break;
+                }
+                if(playerId == 0)
+                    break;
+                waitForUserInput();
+                break;
+            }
+            case 5:{
+                system("clear");
+                int playerId;
+                std::cout << "Give player id(or 0 - Back): ";
+                while(true){
+                    playerId = readInt(std::cin);
+                    if(playerId == 0)
+                        break;
+                    if(this->club->removeFromLineup(playerId) == true)
+                        break;
+                }
+                if(playerId == 0)
+                    break;
+                waitForUserInput();
+                break;
+            }
+            case 0:{
+                running = false;
+                break;
+            }
+            default:{
+                std::cout << "Try again!\n";
+                break;
+            }
+        }
+    }
+}
+
+void Menu::packMenu()
+{
+    int command;
+    bool running = true;
+    Pack<const PlayerCard*>* playerPack;
+    Pack<const UseCard*>* useCardPack;
+    while(running)
+    {
+        system("clear");
+        std::cout << MAGENTA << "Budget: " << this->club->getBudget() << RESET << '\n';
+        std::cout << "1 - Special pack - 30.000\n";
+        std::cout << "2 - Gold pack - 20.000\n";
+        std::cout << "3 - Silver pack - 10.000\n";
+        std::cout << "4 - Bronze pack - 5.000\n";
+        std::cout << "5 - Use cards - 100.000\n";
+        std::cout << "0 - Quit!\n";
+        command = readInt(std::cin);
+        switch(command)
+        {
+            case 1:{
+                system("clear");
+                playerPack = new Pack<const PlayerCard*>("special");
+                waitForUserInput();
+                break;
+            }
+            case 2:{
+                system("clear");
+                playerPack = new Pack<const PlayerCard*>("gold");
+                waitForUserInput();
+                break;
+            }
+            case 3:{
+                system("clear");
+                playerPack = new Pack<const PlayerCard*>("silver");
+                waitForUserInput();
+                break;
+            }
+            case 4:{
+                system("clear");
+                playerPack = new Pack<const PlayerCard*>("bronze");
+                waitForUserInput();
+                break;
+            }
+            case 5:{
+                system("clear");
+                useCardPack = new Pack<const UseCard*>("");
+                waitForUserInput();
+                break;
+            }
+            case 0:{
+                running = false;
+                break;
+            }
+            default:{
+                std::cout << "Try again!\n";
+                break;
+            }
+        }
+    }
+}
+
+void Menu::gameMenu()
+{
+    
 }
 
 int main() {
     // TeamUseCard d("sadsada", 15, 20, "Attack"), e(d);
     Database::readPlayers();
+    std::cout << *Database::getSpecialPlayers()[0];
     // std::unordered_map<int, const PlayerCard*> team1;
     // std::unordered_map<int, const PlayerCard*> team2;
     // std::vector<const PlayerCard*> lineup1;
@@ -949,9 +1231,12 @@ int main() {
     // {
     //     std::cout << *player << '\n';
     // }
-    Club a;
-    std::cin >> a;
-    std::cout << a;
+    // Club a;
+    // std::cin >> a;
+    // std::cout << a;
+    Menu* menu;
+    menu = menu->getInstance();
+    menu->run();
     return 0;
 }
 // testeaza daca red card-ul iti va scoate playerul din lineup si din Club
