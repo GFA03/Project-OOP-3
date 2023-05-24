@@ -440,12 +440,13 @@ const std::vector<const PlayerCard*> Database::getBronzePlayers(){return bronzeP
 
 class Club
 {
+    std::string name;
     std::unordered_map<int, const PlayerCard*> allPlayers;
     std::vector<const PlayerCard*> lineup;
     std::vector<const UseCard*> useCards;
     int budget;
 public:
-    Club(std::unordered_map<int, const PlayerCard*> allPlayers = {}, std::vector<const PlayerCard*> lineup = {}, 
+    Club(std::string name = "Unknown", std::unordered_map<int, const PlayerCard*> allPlayers = {}, std::vector<const PlayerCard*> lineup = {}, 
     std::vector<const UseCard*> useCards = {}, int budget = 0);
     Club(const Club& obj);
     Club& operator=(const Club& obj);
@@ -453,15 +454,17 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const Club& obj);
     ~Club() = default;
 
+    std::string getName() const { return name; }
     int getBudget() const { return budget; }
     void addPlayer(const PlayerCard* player);
     void addToLineup(int playerId);
     void removeFromLineup(int playerId);
 };
 
-Club::Club(std::unordered_map<int, const PlayerCard*> allPlayers, std::vector<const PlayerCard*> lineup, 
+Club::Club(std::string name, std::unordered_map<int, const PlayerCard*> allPlayers, std::vector<const PlayerCard*> lineup, 
     std::vector<const UseCard*> useCards, int budget)
 {
+    this->name = name;
     this->allPlayers = allPlayers;
     this->lineup = lineup;
     this->useCards = useCards;
@@ -470,6 +473,7 @@ Club::Club(std::unordered_map<int, const PlayerCard*> allPlayers, std::vector<co
 
 Club::Club(const Club& obj)
 {
+    this->name = obj.name;
     this->allPlayers = obj.allPlayers;
     this->lineup = obj.lineup;
     this->useCards = obj.useCards;
@@ -480,6 +484,7 @@ Club& Club::operator=(const Club& obj)
 {
     if(this != &obj)
     {
+        this->name = obj.name;
         this->allPlayers = obj.allPlayers;
         this->lineup = obj.lineup;
         this->useCards = obj.useCards;
@@ -490,32 +495,54 @@ Club& Club::operator=(const Club& obj)
 
 std::istream& operator>>(std::istream& in, Club& obj)
 {
-    std::cout << "Insert number of players: ";
-    int allPlayersNr;
-    allPlayersNr = readInt(in);
-    PlayerCard* tempPlayer;
-    for(int i = 0; i < allPlayersNr; i++)
+    std::cout << "Insert club's name (No more than 30 characters): ";
+    while(true)
     {
-        tempPlayer = new PlayerCard();
-        in >> *tempPlayer;
-        obj.allPlayers[tempPlayer->getPlayerId()] = tempPlayer;
+        try{
+            std::getline(in, obj.name);
+            if(obj.name.length() > 30)
+                throw std::invalid_argument("Club's name must be at most 30 characters!\n");
+            break;
+        }
+        catch(const std::invalid_argument& e)
+        {
+            std::cout << e.what() << "Try again!\n";
+        }
     }
-    std::cout << "Insert budget: ";
-    obj.budget = readInt(in);
+    // std::cout << "Insert number of players: ";
+    // int allPlayersNr;
+    // allPlayersNr = readInt(in);
+    // PlayerCard* tempPlayer;
+    // for(int i = 0; i < allPlayersNr; i++)
+    // {
+    //     tempPlayer = new PlayerCard();
+    //     in >> *tempPlayer;
+    //     obj.allPlayers[tempPlayer->getPlayerId()] = tempPlayer;
+    // }
+    // std::cout << "Insert budget: ";
+    // obj.budget = readInt(in);
+    obj.budget = 2000;
     return in;
 }
 
 std::ostream& operator<<(std::ostream& out, const Club& obj)
 {
+    out << "Club's name: " << obj.name << '\n';
     out << "Players in club:\n";
     for(auto player: obj.allPlayers)
         out << player.second << '\n';
     out << "Lineup:\n";
-    for(int i = 0; i < obj.lineup.size(); i++)
-        out << obj.lineup[i] << '\n';
+    if(!obj.lineup.empty())
+        for(int i = 0; i < obj.lineup.size(); i++)
+            out << obj.lineup[i] << '\n';
+    else
+        std::cout << "\tNo players yet!\n";
     out << "Use cards in club:\n";
-    for(int i = 0; i < obj.useCards.size(); i++)
-        out << obj.useCards[i] << '\n';
+    if(!obj.useCards.empty())
+        for(int i = 0; i < obj.useCards.size(); i++)
+            out << obj.useCards[i] << '\n';
+    else
+        std::cout << "\tNo use cards yet!\n";
     out << "Budget: " << obj.budget << '\n';
     return out;
 }
@@ -852,6 +879,45 @@ std::ostream& operator<<(std::ostream& out, const Pack<T>& obj)
     return out;
 }
 
+class Menu
+{
+    static Menu* instance;
+    static int nrOfInstances;
+    Club* club;
+    Menu();
+    Menu(const Menu& obj) = delete;
+    Menu& operator=(const Menu& obj) = delete;
+public:
+    static Menu* getInstance();
+    ~Menu();
+
+    void run();
+};
+
+int Menu::nrOfInstances = 0;
+Menu* Menu::instance = nullptr;
+
+Menu::Menu()
+{
+    
+}
+
+Menu* Menu::getInstance()
+{
+    nrOfInstances++;
+    if(instance == nullptr){
+        instance = new Menu();
+    }
+    return instance;
+}
+
+Menu::~Menu(){
+    nrOfInstances--;
+    if(nrOfInstances == 0)
+        if(instance)
+            delete instance;
+}
+
 int main() {
     // TeamUseCard d("sadsada", 15, 20, "Attack"), e(d);
     Database::readPlayers();
@@ -878,11 +944,21 @@ int main() {
     // std::cout << chancesForTeamB << '\n';
     // std::cout << game1;
     // game1.simGame();
-    Pack<const PlayerCard*> tempPack;
-    for(auto player: tempPack.getItems())
-    {
-        std::cout << *player << '\n';
-    }
+    // Pack<const PlayerCard*> tempPack;
+    // for(auto player: tempPack.getItems())
+    // {
+    //     std::cout << *player << '\n';
+    // }
+    Club a;
+    std::cin >> a;
+    std::cout << a;
     return 0;
 }
 // testeaza daca red card-ul iti va scoate playerul din lineup si din Club
+
+// in meniu ai optiune sa iti vezi clubul -> vezi nr de playerii pe care ii ai ( dupa ai optiune sa vezi toti playerii pe care ii ai)
+// ai o optiune de quick sell si te intreaba sa ii dai id-ul
+// ai un meniu de packuri unde ai iduri de selectat ce pack vrei sa cumperi
+// cand ai selectat ce pack vrei sa cumperi iti face o animatie de o secunde de Loading transaction. . .
+// Dupa ce ai cumparat pachetul iti arata tot ce ti-a picat si vei avea optiunile 1. Quick sell all, 2. Store all in club, 3. Store Player Id in club
+// Daca ai selectat sa-i dai unui player boost te las sa ii ai pe amandoi in club ( cel neebostat si cel boostat) dar in lineup ai voie sa ai unul singur
