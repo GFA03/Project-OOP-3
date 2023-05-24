@@ -66,7 +66,7 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const PlayerCard& obj);
     ~PlayerCard() = default;
 
-    const int getPlayerId();
+    const int getPlayerId() const;
     int calcOVR() const;
 };
 
@@ -144,6 +144,7 @@ std::ostream& operator<<(std::ostream& out, const PlayerCard& obj)
         color = GOLD;
     else if(ovr <= 65)
         color = BRONZE;
+    out << color << "Player id: " << RESET << obj.playerId << '\n';
     out << color << (Card&)obj;
     out << color << "Attack overall: " << RESET << obj.attackOVR << '\n';
     out << color << "Defense overall: " << RESET << obj.defenseOVR << '\n';
@@ -151,7 +152,7 @@ std::ostream& operator<<(std::ostream& out, const PlayerCard& obj)
     return out;
 }
 
-const int PlayerCard::getPlayerId(){return this->playerId;}
+const int PlayerCard::getPlayerId() const{return this->playerId;}
 
 int PlayerCard::calcOVR() const{return std::max(this->attackOVR, this->defenseOVR);}
 
@@ -382,18 +383,147 @@ const std::vector<const PlayerCard*> Database::getSilverPlayers() const{return t
 
 const std::vector<const PlayerCard*> Database::getBronzePlayers() const{return this->bronzePlayers;}
 
+class Club
+{
+    std::unordered_map<int, const PlayerCard*> allPlayers;
+    std::vector<const PlayerCard*> lineup;
+    std::vector<const UseCard*> useCards;
+    int budget;
+public:
+    Club(std::unordered_map<int, const PlayerCard*> allPlayers = {}, std::vector<const PlayerCard*> lineup = {}, 
+    std::vector<const UseCard*> useCards = {}, int budget = 0);
+    Club(const Club& obj);
+    Club& operator=(const Club& obj);
+    friend std::istream& operator>>(std::istream& in, Club& obj);
+    friend std::ostream& operator<<(std::ostream& out, const Club& obj);
+    ~Club() = default;
+
+    int getBudget() const { return budget; }
+    void addPlayer(const PlayerCard* player);
+    void addToLineup(int playerId);
+    void removeFromLineup(int playerId);
+};
+
+Club::Club(std::unordered_map<int, const PlayerCard*> allPlayers, std::vector<const PlayerCard*> lineup, 
+    std::vector<const UseCard*> useCards, int budget)
+{
+    this->allPlayers = allPlayers;
+    this->lineup = lineup;
+    this->useCards = useCards;
+    this->budget = budget;
+}
+
+Club::Club(const Club& obj)
+{
+    this->allPlayers = obj.allPlayers;
+    this->lineup = obj.lineup;
+    this->useCards = obj.useCards;
+    this->budget = obj.budget;
+}
+
+Club& Club::operator=(const Club& obj)
+{
+    if(this != &obj)
+    {
+        this->allPlayers = obj.allPlayers;
+        this->lineup = obj.lineup;
+        this->useCards = obj.useCards;
+        this->budget = obj.budget;
+    }
+    return *this;
+}
+
+std::istream& operator>>(std::istream& in, Club& obj)
+{
+    std::cout << "Insert number of players: ";
+    int allPlayersNr;
+    allPlayersNr = readInt(in);
+    PlayerCard* tempPlayer;
+    for(int i = 0; i < allPlayersNr; i++)
+    {
+        tempPlayer = new PlayerCard();
+        in >> *tempPlayer;
+        obj.allPlayers[tempPlayer->getPlayerId()] = tempPlayer;
+    }
+    std::cout << "Insert budget: ";
+    obj.budget = readInt(in);
+    return in;
+}
+
+std::ostream& operator<<(std::ostream& out, const Club& obj)
+{
+    out << "Players in club:\n";
+    for(auto player: obj.allPlayers)
+        out << player.second << '\n';
+    out << "Lineup:\n";
+    for(int i = 0; i < obj.lineup.size(); i++)
+        out << obj.lineup[i] << '\n';
+    out << "Use cards in club:\n";
+    for(int i = 0; i < obj.useCards.size(); i++)
+        out << obj.useCards[i] << '\n';
+    out << "Budget: " << obj.budget << '\n';
+    return out;
+}
+
+void Club::addPlayer(const PlayerCard* player)
+{
+    if(this->allPlayers.find(player->getPlayerId()) == this->allPlayers.end())
+    {
+        std::cout << "Player is already in this club!\n";
+        return;
+    }
+    this->allPlayers[player->getPlayerId()] = player;
+    std::cout << "Player has been added successfully!\n";
+}
+
+void Club::addToLineup(int playerId)
+{
+    if(this->lineup.size() == 11)
+    {
+        std::cout << "Lineup full!\n";
+        return;
+    }
+    if(this->allPlayers.find(playerId) == this->allPlayers.end())
+    {
+        std::cout << "Player is not in the club!\n";
+        return;
+    }
+    for(int i = 0; i < this->lineup.size(); ++i)
+        if(this->lineup[i]->getPlayerId() == playerId)
+        {
+            std::cout << "Player is already in the lineup!\n";
+            return;
+        }
+    this->lineup.push_back(this->allPlayers[playerId]);
+    std::cout << "Player has been added to the lineup!\n";
+}
+
+void Club::removeFromLineup(int playerId)
+{
+    for(int i = 0; i < this->lineup.size(); ++i)
+        if(this->lineup[i]->getPlayerId() == playerId)
+        {
+            this->lineup.erase(this->lineup.begin() + i);
+            std::cout << "Player has been removed from the lineup!\n";
+            return;
+        }
+    std::cout << "Player has not been found!\n";
+}
+
+class Game
+{
+    std::vector<const PlayerCard*> lineup1;
+    std::vector<const PlayerCard*> lineup2;
+public:
+
+    int simGame(); //returns 0 = team1 victory, 1 = draw, 2 = team2 victory
+};
+
 int main() {
-    // readPlayers();
-    PlayerCard b("Cristiano Ronaldo", 92, 32, 1900);
-    UseCard c("salas", 12);
     // TeamUseCard d("sadsada", 15, 20, "Attack"), e(d);
-    // std::cout << b;
     Database* d;
     d = d->getInstance();
     for(int i = 0; i < d->getBronzePlayers().size(); i++)
         std::cout << *d->getBronzePlayers()[i] << '\n';
     return 0;
 }
-
-// to do list: trebuie clasa GAME si clasa TEAM 
-// de altfel nu ai facut PlayerUseCard
