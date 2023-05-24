@@ -80,7 +80,7 @@ public:
     int getDefenseOVR() const { return defenseOVR; }
     const int getPlayerId() const;
     int calcOVR() const;
-
+    int getQuickSellValue() const { return quickSellValue; }
     bool operator<(const PlayerCard& obj) const;
 };
 
@@ -441,6 +441,8 @@ const std::vector<const PlayerCard*> Database::getSilverPlayers(){return silverP
 
 const std::vector<const PlayerCard*> Database::getBronzePlayers(){return bronzePlayers;}
 
+class Game;
+
 class Club
 {
     std::string name;
@@ -461,11 +463,16 @@ public:
     void showAllPlayers();
     std::string getName() const { return name; }
     bool checkPlayerInClub(int playerId);
+    const std::unordered_map<int, const PlayerCard*> getAllPlayers() const { return allPlayers; }
     const std::vector<const PlayerCard*> getLineup() const {return lineup;}
     int getBudget() const { return budget; }
+    void setBudget(int budget) { this->budget = budget;}
     bool addPlayer(const PlayerCard* player);
     bool addToLineup(int playerId);
     bool removeFromLineup(int playerId);
+
+    Club operator +(int); // increases top speed
+    friend Club operator+(int, Club);
 };
 
 Club::Club(std::string name, std::unordered_map<int, const PlayerCard*> allPlayers, std::vector<const PlayerCard*> lineup, 
@@ -528,7 +535,8 @@ std::istream& operator>>(std::istream& in, Club& obj)
     // }
     // std::cout << "Insert budget: ";
     // obj.budget = readInt(in);
-    obj.budget = 2000;
+    // obj.budget = 2000;
+    obj.budget = 200000;
     return in;
 }
 
@@ -545,7 +553,7 @@ std::ostream& operator<<(std::ostream& out, const Club& obj)
         std::cout << obj.lineup.size() << '\n';
     else
         std::cout << "No players yet!\n";
-    out << "Use cards in club: ";
+    out << "Use cards in club:\n";
     if(!obj.useCards.empty())
         for(int i = 0; i < obj.useCards.size(); i++)
             out << obj.useCards[i] << '\n';
@@ -555,20 +563,10 @@ std::ostream& operator<<(std::ostream& out, const Club& obj)
     return out;
 }
 
-void Club::showLineup()
-{
-    if(!this->lineup.empty()){
-        for(int i = 0; i < this->lineup.size(); i++)
-            std::cout << this->lineup[i] << '\n';
-        std::cout << "Total attack OVR: " << Game::getTeamAttackOVR(this->lineup);
-        std::cout << "Total defense OVR: " << Game::getTeamDefenseOVR(this->lineup);
-    }
-}
-
 void Club::showAllPlayers()
 {
     for(auto player: this->allPlayers)
-        std::cout << player.second << '\n';
+        std::cout << *player.second << '\n';
 }
 
 bool Club::addPlayer(const PlayerCard* player)
@@ -633,9 +631,10 @@ class Game
     int homeScore;
     int awayScore;
     int minute;
+    std::unordered_map<int, int> yellowCards;
 public:
     Game(std::vector<const PlayerCard*> lineup1 = {}, std::vector<const PlayerCard*> lineup2 = {},
-        int homeScore = 0, int awayScore = 0, int minute = 0);
+        int homeScore = 0, int awayScore = 0, int minute = 0, std::unordered_map<int, int> yellowCards = {});
     Game(const Game& obj);
     Game& operator=(const Game& obj);
     friend std::istream& operator>>(std::istream& in, Game& obj);
@@ -644,20 +643,21 @@ public:
 
     static int getTeamAttackOVR(std::vector<const PlayerCard*> lineup);
     static int getTeamDefenseOVR(std::vector<const PlayerCard*> lineup);
-    std::string eventDraw(int team, int event, int minute);
+    std::string eventDraw(int team, int event);
     static std::string getSpaces(std::string temp);
     void setLineups(std::vector<const PlayerCard*> lineup1, std::vector<const PlayerCard*> lineup2);
     int simGame(); //returns 0 = team1 victory, 1 = draw, 2 = team2 victory
 };
 
 Game::Game(std::vector<const PlayerCard*> lineup1, std::vector<const PlayerCard*> lineup2, int homeScore, int awayScore,
-            int minute)
+            int minute, std::unordered_map<int, int> yellowCards)
 {
     this->lineup1 = lineup1;
     this->lineup2 = lineup2;
     this->homeScore = homeScore;
     this->awayScore = awayScore;
     this->minute = minute;
+    this->yellowCards = yellowCards;
 }
 
 Game::Game(const Game& obj)
@@ -698,6 +698,17 @@ int Game::getTeamDefenseOVR(std::vector<const PlayerCard*> lineup)
     return total;
 }
 
+
+void Club::showLineup()
+{
+    if(!this->lineup.empty()){
+        for(int i = 0; i < this->lineup.size(); i++)
+            std::cout << *this->lineup[i] << '\n';
+        std::cout << "Total attack OVR: " << Game::getTeamAttackOVR(this->lineup) << '\n';
+        std::cout << "Total defense OVR: " << Game::getTeamDefenseOVR(this->lineup) << '\n';
+    }
+}
+
 std::string Game::getSpaces(std::string temp){
     std::string result = "";
     for(int i = 0; i < 50 - temp.length(); i++)
@@ -726,7 +737,7 @@ void gameDraw(int scoreHome, int scoreAway)
 
 }
 
-std::string Game::eventDraw(int team, int event, int minute) // 1 - Team 1, 2 - Team 2 || 1 - GOAL, 2 - YELLOW CARD, 3 - RED CARD
+std::string Game::eventDraw(int team, int event) // 1 - Team 1, 2 - Team 2 || 1 - GOAL, 2 - YELLOW CARD, 3 - RED CARD
 {
     std::string temp = "|";
     std::random_device rd;
@@ -745,17 +756,17 @@ std::string Game::eventDraw(int team, int event, int minute) // 1 - Team 1, 2 - 
         temp += std::to_string(minute);
         if(event == 1)
         {
-            this->homeScore++;
             temp += " - GOAL: ";
         }else if(event == 2)
         {
             temp += " - YELLOW CARD: ";
+            this->yellowCards[this->lineup1[player]->getPlayerId()]++;
         }
-        else{
+        if(event == 3 || this->yellowCards[this->lineup1[player]->getPlayerId()] == 2){
             temp += " - RED CARD: ";
         }
         temp += this->lineup1[player]->getName();
-        if(event == 3)
+        if(event == 3 || this->yellowCards[this->lineup1[player]->getPlayerId()] == 2)
             this->lineup1.erase(this->lineup1.begin() + player);
     }
     else if(team == 2)
@@ -764,18 +775,19 @@ std::string Game::eventDraw(int team, int event, int minute) // 1 - Team 1, 2 - 
         temp += std::to_string(minute);
         if(event == 1)
         {
-            this->awayScore++;
             temp += " - GOAL: ";
         }else if(event == 2)
         {
             temp += " - YELLOW CARD: ";
+            this->yellowCards[this->lineup2[player]->getPlayerId()]++;
+
         }
         else{
             temp += " - RED CARD: ";
         }
         temp += this->lineup2[player]->getName();
-        if(event == 3)
-            this->lineup1.erase(this->lineup1.begin() + player);
+        if(event == 3 || this->yellowCards[this->lineup2[player]->getPlayerId()] == 2)
+            this->lineup2.erase(this->lineup2.begin() + player);
     }
     for(int i = temp.length(); i < 68; i++)
         temp += " ";
@@ -789,28 +801,56 @@ int Game::simGame()
         return -1;
     std::random_device rd;
     std::mt19937 rng(rd());
-    // std::uniform_int_distribution<double> eventType(0.0, 1.0);
+    std::uniform_int_distribution<int> eventType(0, 4000);
+    int chanceEvent;
     std::string events = "";
     // calc chances (team1 attack and defense ovr and then for team2)
-    double scoringChancesForTeamA;
-    double scoringChancesForTeamB;
+    int scoringChancesForTeamA;
+    int scoringChancesForTeamB;
     while(minute < 93)
     {
-        scoringChancesForTeamA = 1.0 / (1.0 + std::exp((this->getTeamDefenseOVR(lineup2) - this->getTeamAttackOVR(lineup1)) / 10.0));
-        scoringChancesForTeamB = 1.0 / (1.0 + std::exp((this->getTeamDefenseOVR(lineup1) - this->getTeamAttackOVR(lineup2)) / 10.0));
+        scoringChancesForTeamA = (int)(1.0 / (1.0 + std::exp((Game::getTeamDefenseOVR(this->lineup2) - Game::getTeamAttackOVR(this->lineup1)) / 100.0)) * 100);
+        scoringChancesForTeamB = (int)(1.0 / (1.0 + std::exp((Game::getTeamDefenseOVR(this->lineup1) - Game::getTeamAttackOVR(this->lineup2)) / 100.0)) * 100);
         system("clear");
         std::cout << "+-------------------------------------------------------------------+\n";
         std::cout << "|           YOUR TEAM           " << this->homeScore << " - " << this->awayScore << "            OPPONENT TEAM      |" << std::endl;
         std::cout << "|                                " << this->minute << "                                 |\n";
         std::cout << "+-------------------------------------------------------------------+\n";
-        if(minute == 23)
-            events += this->eventDraw(2, 1, this->minute);
+        chanceEvent = eventType(rng);
+        if(chanceEvent < scoringChancesForTeamA){
+            this->homeScore ++;
+            events += this->eventDraw(1, 1);
+        }
+        else if(chanceEvent > 200 && chanceEvent < 225)
+            events += this->eventDraw(1, 2);
+        else if(chanceEvent > 500 && chanceEvent < 505)
+            events += this->eventDraw(1, 3);
+        else if(chanceEvent < 100 && chanceEvent > 100 - scoringChancesForTeamB){
+            this->awayScore ++;
+            events += this->eventDraw(2, 1);
+        }
+        else if(chanceEvent > 300 && chanceEvent < 325)
+            events += this->eventDraw(2, 2);
+        else if(chanceEvent > 800 && chanceEvent < 805)
+            events += this->eventDraw(2, 3);
         std::cout << events;
         if(events.length() > 1)
             std::cout << "+-------------------------------------------------------------------+\n";
-        // usleep(100000);
+        usleep(100000);
         this->minute++;
     }
+    system("clear");
+        std::cout << "+-------------------------------------------------------------------+\n";
+        std::cout << "|           YOUR TEAM           " << this->homeScore << " - " << this->awayScore << "            OPPONENT TEAM      |" << std::endl;
+        std::cout << "|                                " << this->minute << "                                 |\n";
+        std::cout << "+-------------------------------------------------------------------+\n";
+        std::cout << events;
+        if(events.length() > 1)
+            std::cout << "+-------------------------------------------------------------------+\n";
+    if(homeScore > awayScore)
+        return 1;
+    if(awayScore > homeScore)
+        return 2;
     return 0;
 }
 
@@ -826,6 +866,9 @@ public:
     ~Pack() = default;
 
     const std::list<T> getItems() const{return items;}
+    int getValue() const;
+    void setItems(std::list<T>);
+    void deleteElement(int index);
 };
 
 template <typename T>
@@ -913,6 +956,29 @@ std::ostream& operator<<(std::ostream& out, const Pack<T>& obj)
     return out;
 }
 
+template <typename T>
+int Pack<T>::getValue() const{
+    if(this->items.empty()) return 0;
+    int sum = 0;
+    for(auto item: this->items)
+        sum += item->getQuickSellValue();
+    return sum;
+}
+
+template <typename T>
+void Pack<T>::deleteElement(int index)
+{
+    auto it = this->items.begin();
+    std::advance(it, index);
+    this->items.erase(it);
+}
+
+template <typename T>
+void Pack<T>::setItems(std::list<T> items)
+{
+    this->items = items;
+}
+
 bool endsWith(const std::string& str, const std::string& suffix) {
     if (str.length() >= suffix.length()) {
         return (str.substr(str.length() - suffix.length()) == suffix);
@@ -926,7 +992,8 @@ class Menu
     static int nrOfInstances;
     std::string filename;
     Club* club;
-    Menu(Club* club = nullptr, std::string filename = "unknown");
+    Game* game;
+    Menu(Club* club = nullptr, std::string filename = "unknown", Game* game = nullptr);
     Menu(const Menu& obj) = delete;
     Menu& operator=(const Menu& obj) = delete;
 public:
@@ -936,16 +1003,18 @@ public:
     void run();
     void clubMenu();
     void packMenu();
+    void openedPackMenu(Pack<const PlayerCard*>*);
     void gameMenu();
 };
 
 int Menu::nrOfInstances = 0;
 Menu* Menu::instance = nullptr;
 
-Menu::Menu(Club* club, std::string filename)
+Menu::Menu(Club* club, std::string filename, Game* game)
 {
     this->club = club;
     this->filename = filename;
+    this->game = game;
 }
 
 Menu* Menu::getInstance()
@@ -968,22 +1037,10 @@ Menu::~Menu(){
 
 void waitForUserInput()
 {
-    // Wait for the user to press Enter
     std::cout << "\nPress Enter to continue...";
-
-    // Disable terminal buffering
-    termios oldSettings, newSettings;
-    tcgetattr(STDIN_FILENO, &oldSettings);
-    newSettings = oldSettings;
-    newSettings.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newSettings);
-
-    // Read a single character
-    char ch;
-    std::cin.get(ch);
-
-    // Restore terminal settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldSettings);
+    std::string line;
+    std::cin >> line;
+    // std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 void Menu::run(){
@@ -994,6 +1051,8 @@ void Menu::run(){
             std::getline(std::cin, filename);
             if(filename.find(" ") != std::string::npos)
                 throw std::runtime_error("Invalid filename (it contains spaces)!");
+            if(filename.length() <= 4)
+                throw std::runtime_error("Invalid filename (too short)!");
             if(endsWith(filename, ".txt"))
                 break;
             throw std::runtime_error("Invalid filename (it doesn't end in .txt)!");
@@ -1007,6 +1066,12 @@ void Menu::run(){
     {
         this->club = new Club();
         std::cin >> *this->club;
+        for(int i = 0; i < 5; i++)
+        {
+            this->club->addPlayer(extractRandomElements(Database::getBronzePlayers(), 1)[0]);
+            this->club->addPlayer(extractRandomElements(Database::getSilverPlayers(), 1)[0]);
+        }
+        this->club->addPlayer(extractRandomElements(Database::getGoldPlayers(), 1)[0]);
     }
     int command;
     bool running = true;
@@ -1050,7 +1115,7 @@ void Menu::run(){
     }
 }
 
-void Menu::clubMenu()
+void Menu::clubMenu() // BAGA CASE SA POTI DA QUICK SELL DUPA ID
 {
     int command;
     bool running = true;
@@ -1062,6 +1127,7 @@ void Menu::clubMenu()
         std::cout << "3 - View lineup!\n"; // in view lineup iti vezi si total attack ovr si total defense ovr
         std::cout << "4 - Add to lineup!\n";
         std::cout << "5 - Remove from lineup!\n";
+        std::cout << "6 - Random lineup!\n";
         std::cout << "0 - Quit!\n";
         command = readInt(std::cin);
         switch(command)
@@ -1092,13 +1158,13 @@ void Menu::clubMenu()
             case 4:{
                 system("clear");
                 int playerId;
+                this->club->showAllPlayers();
                 std::cout << "Give player id(or 0 - Back): ";
                 while(true){
                     playerId = readInt(std::cin);
                     if(playerId == 0)
                         break;
-                    if(this->club->addToLineup(playerId) == true)
-                        break;
+                    this->club->addToLineup(playerId);
                 }
                 if(playerId == 0)
                     break;
@@ -1120,6 +1186,11 @@ void Menu::clubMenu()
                     break;
                 waitForUserInput();
                 break;
+            }
+            case 6:{
+                system("clear");
+                for(auto player: this->club->getAllPlayers())
+                    this->club->addToLineup(player.first);
             }
             case 0:{
                 running = false;
@@ -1154,31 +1225,61 @@ void Menu::packMenu()
         {
             case 1:{
                 system("clear");
+                if(this->club->getBudget() < 30000)
+                    std::cout << "Insufficient funds!";
+                else{
+                this->club->setBudget(this->club->getBudget() - 30000);
                 playerPack = new Pack<const PlayerCard*>("special");
+                this->openedPackMenu(playerPack);
+                }
                 waitForUserInput();
                 break;
             }
             case 2:{
                 system("clear");
+                if(this->club->getBudget() < 20000)
+                    std::cout << "Insufficient funds!";
+                else{
+                this->club->setBudget(this->club->getBudget() - 20000);
                 playerPack = new Pack<const PlayerCard*>("gold");
+                this->openedPackMenu(playerPack);
+                }
                 waitForUserInput();
                 break;
             }
             case 3:{
                 system("clear");
+                if(this->club->getBudget() < 10000)
+                    std::cout << "Insufficient funds!";
+                else{
+                this->club->setBudget(this->club->getBudget() - 10000);
                 playerPack = new Pack<const PlayerCard*>("silver");
+                this->openedPackMenu(playerPack);
+                }
                 waitForUserInput();
                 break;
             }
             case 4:{
                 system("clear");
+                if(this->club->getBudget() < 5000)
+                    std::cout << "Insufficient funds!";
+                else{
+                this->club->setBudget(this->club->getBudget() - 5000);
                 playerPack = new Pack<const PlayerCard*>("bronze");
+                this->openedPackMenu(playerPack);
+                }
                 waitForUserInput();
                 break;
             }
             case 5:{
                 system("clear");
-                useCardPack = new Pack<const UseCard*>("");
+                if(this->club->getBudget() < 100000)
+                    std::cout << "Insufficient funds!";
+                else{
+                this->club->setBudget(this->club->getBudget() - 100000);
+                // useCardPack = new Pack<const UseCard*>("");
+                // this->openedPackMenu(useCardPack); // NECESITA MODIFICARI INTRUCAT NU MERGE ASTFEL
+                }
                 waitForUserInput();
                 break;
             }
@@ -1194,36 +1295,181 @@ void Menu::packMenu()
     }
 }
 
+void Menu::openedPackMenu(Pack<const PlayerCard*>* playerPack)
+{
+    system("clear");
+    std::list<const PlayerCard*> tempList;
+    int commandPack;
+    while(!playerPack->getItems().empty())
+    {
+        tempList = {};
+        std::cout << *playerPack << '\n';
+        std::cout << "1 - Store all items in the club!\n"; // cand dai store elimini itemele din pachet atunci cand le bagi in club
+        std::cout << "2 - Quick sell all items for " << playerPack->getValue() << "!\n";
+        commandPack = readInt(std::cin);
+        switch(commandPack){
+            case 1:{
+                int index = 0;
+                for(auto player: playerPack->getItems())
+                {
+                    if(this->club->getAllPlayers().find(player->getPlayerId()) == this->club->getAllPlayers().end()) // If the player is not already in the club we remove it from the pack and add it to the club
+                    {
+                        this->club->addPlayer(player);
+                        // playerPack->deleteElement(index);
+                    }
+                    else {
+                        tempList.push_back(player);
+                    }
+                }
+                playerPack->setItems(tempList);
+                break;
+            }
+            case 2:{
+                for(auto player: playerPack->getItems())
+                {
+                    this->club->setBudget(this->club->getBudget() + player->getQuickSellValue());
+                }
+                playerPack->setItems(tempList);
+                break;
+            }
+            default:{
+                std::cout << "Invalid command!\n";
+                break;
+            }
+        }
+    }
+}
+
 void Menu::gameMenu()
 {
-    
+    // verifica ca in lineup sunt 11 jucatori altfel da-l afara
+    // dai optiunea 0 sa se intoarca inapoi fara sa joace
+    // implementeaza o suma de bani pt win
+    int command;
+    bool running = true;
+    int result;
+    std::vector<const PlayerCard*> lineupComputer;
+    if(this->club->getLineup().size() == 11)
+        while(running)
+        {
+            system("clear");
+            std::cout << "Choose difficulty:\n";
+            std::cout << "You will be rewarded more money for higher difficulty!\n";
+            std::cout << "1 - Easy!\n";
+            std::cout << "2 - Medium!\n";
+            std::cout << "3 - Hard!\n";
+            std::cout << "4 - Very hard!\n";
+            std::cout << "0 - Back!\n";
+            command = readInt(std::cin);
+            switch(command)
+            {
+                case 1:{
+                    system("clear");
+                    lineupComputer = extractRandomElements(Database::getBronzePlayers(), 11);
+                    game = new Game(this->club->getLineup(), lineupComputer);
+                    result = game->simGame();
+                    if(result == 0)
+                        this->club->setBudget(this->club->getBudget() + 200);
+                    else if(result == 1)
+                        this->club->setBudget(this->club->getBudget() + 500);
+                    else if(result == 2)
+                        this->club->setBudget(this->club->getBudget() + 100);
+                    waitForUserInput();
+                    running = false;
+                    break;
+                }
+                case 2:{
+                    system("clear");
+                    lineupComputer = extractRandomElements(Database::getSilverPlayers(), 11);
+                    game = new Game(this->club->getLineup(), lineupComputer);
+                    result = game->simGame();
+                    if(result == 0)
+                        this->club->setBudget(this->club->getBudget() + 500);
+                    else if(result == 1)
+                        this->club->setBudget(this->club->getBudget() + 1500);
+                    else if(result == 2)
+                        this->club->setBudget(this->club->getBudget() + 250);
+                    waitForUserInput();
+                    running = false;
+                    break;
+                }
+                case 3:{
+                    system("clear");
+                    lineupComputer = extractRandomElements(Database::getGoldPlayers(), 11);
+                    game = new Game(this->club->getLineup(), lineupComputer);
+                    result = game->simGame();
+                    if(result == 0)
+                        this->club->setBudget(this->club->getBudget() + 1000);
+                    else if(result == 1)
+                        this->club->setBudget(this->club->getBudget() + 3000);
+                    else if(result == 2)
+                        this->club->setBudget(this->club->getBudget() + 350);
+                    waitForUserInput();
+                    running = false;
+                    break;
+                }
+                case 4:{
+                    system("clear");
+                    lineupComputer = extractRandomElements(Database::getSpecialPlayers(), 11);
+                    game = new Game(this->club->getLineup(), lineupComputer);
+                    result = game->simGame();
+                    if(result == 0)
+                        this->club->setBudget(this->club->getBudget() + 2500);
+                    else if(result == 1)
+                        this->club->setBudget(this->club->getBudget() + 5000);
+                    else if(result == 2)
+                        this->club->setBudget(this->club->getBudget() + 450);
+                    waitForUserInput();
+                    running = false;
+                    break;
+                }
+                case 0:{
+                    running = false;
+                    break;
+                }
+                default:{
+                    std::cout << "Try again!\n";
+                    break;
+                }
+            }
+        }
+    else{
+        std::cout << "Lineup incomplete!\n";
+        waitForUserInput();
+    }
 }
 
 int main() {
     // TeamUseCard d("sadsada", 15, 20, "Attack"), e(d);
     Database::readPlayers();
-    std::cout << *Database::getSpecialPlayers()[0];
+    // std::cout << *Database::getSpecialPlayers()[0];
     // std::unordered_map<int, const PlayerCard*> team1;
     // std::unordered_map<int, const PlayerCard*> team2;
     // std::vector<const PlayerCard*> lineup1;
     // std::vector<const PlayerCard*> lineup2;
-    // for(int i = 0; i < 22; i++)
+    // std::vector<const PlayerCard*> lineup3;
+    // for(int i = 0; i < 33; i++)
     // {
     //     if(i < 11){
-    //         team1[i] = d->specialPlayers[i];
+    //         team1[i] = Database::getSpecialPlayers()[i];
     //         lineup1.push_back(team1[i]);
     //     }
-    //     else{
-    //         team2[i-11] = d->specialPlayers[i];
+    //     else if(i < 22){
+    //         team2[i-11] = Database::getSpecialPlayers()[i];
     //         lineup2.push_back(team2[i-11]);
+    //     }else{
+    //         lineup3.push_back(Database::getBronzePlayers()[i]);
     //     }
     // }
     // Club club1(team1, lineup1), club2(team2, lineup2);
-    // Game game1(lineup1, lineup2);
+    // Game game1(lineup1, lineup3);
     // std::cout << "Lineup 1: " << game1.getTeamAttackOVR(lineup1) << " " << game1.getTeamDefenseOVR(lineup1) << '\n';
     // std::cout << "Lineup 2: " << game1.getTeamAttackOVR(lineup2) << " " << game1.getTeamDefenseOVR(lineup2) << '\n';
-    // std::cout << chancesForTeamA << '\n';
-    // std::cout << chancesForTeamB << '\n';
+    // std::cout << "Lineup 3: " << game1.getTeamAttackOVR(lineup3) << " " << game1.getTeamDefenseOVR(lineup3) << '\n';
+    // int scoringChancesForTeamA = (int)(1.0 / (1.0 + std::exp((Game::getTeamDefenseOVR(lineup2) - Game::getTeamAttackOVR(lineup3)) / 100.0)) * 100);
+    // int scoringChancesForTeamB = (int)(1.0 / (1.0 + std::exp((Game::getTeamDefenseOVR(lineup3) - Game::getTeamAttackOVR(lineup2)) / 100.0)) * 100);
+    // std::cout << scoringChancesForTeamA << '\n';
+    // std::cout << scoringChancesForTeamB << '\n';
     // std::cout << game1;
     // game1.simGame();
     // Pack<const PlayerCard*> tempPack;
@@ -1236,7 +1482,13 @@ int main() {
     // std::cout << a;
     Menu* menu;
     menu = menu->getInstance();
-    menu->run();
+    try{
+        menu->run();
+    }
+    catch(...)
+    {
+        std::cout << "Unexpected error occured!\n";
+    }
     return 0;
 }
 // testeaza daca red card-ul iti va scoate playerul din lineup si din Club
