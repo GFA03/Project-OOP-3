@@ -19,98 +19,6 @@
 #define BRONZE "\x1b[30m"
 #define RESET "\x1b[0m"
 
-//make it abstract!!!
-class Card{
-    std::string name;
-
-public:
-    Card(const std::string& name = "Unknown");
-    Card(const Card& obj);
-    Card& operator=(const Card& obj);
-    friend std::istream& operator>>(std::istream& in, Card& obj);
-    friend std::ostream& operator<<(std::ostream& out, const Card& obj);
-    virtual ~Card() = default;
-
-    std::string getName() const { return name; }
-};
-
-Card::Card(const std::string& name): name(name){}
-
-Card::Card(const Card& obj): name(obj.name) {}
-
-Card& Card::operator=(const Card& obj)
-{
-    if(this != &obj)
-    {
-        this->name = obj.name;
-    }
-    return *this;
-}
-
-std::istream& operator>>(std::istream& in, Card& obj)
-{
-    std::cout << "Insert name: ";
-    std::getline(in, obj.name);
-    return in;
-}
-
-std::ostream& operator<<(std::ostream& out, const Card& obj)
-{
-    out << "Name: " << RESET << obj.name << '\n';
-    return out;
-}
-
-class PlayerCard: public Card
-{
-    static int playerCount;
-    const int playerId;
-    int attackOVR;
-    int defenseOVR;
-    int quickSellValue;
-
-public:
-    PlayerCard(std::string name = "Unknown", int attackOVR = 0, int defenseOVR = 0, int quickSellValue = 0);
-    PlayerCard(const PlayerCard& obj);
-    PlayerCard& operator=(const PlayerCard& obj);
-    friend std::istream& operator>>(std::istream& in, PlayerCard& obj);
-    friend std::ostream& operator<<(std::ostream& out, const PlayerCard& obj);
-    ~PlayerCard() = default;
-
-    int getAttackOVR() const { return attackOVR; }
-    int getDefenseOVR() const { return defenseOVR; }
-    const int getPlayerId() const;
-    int calcOVR() const;
-    int getQuickSellValue() const { return quickSellValue; }
-    bool operator<(const PlayerCard& obj) const;
-};
-
-int PlayerCard::playerCount = 1;
-
-PlayerCard::PlayerCard(std::string name, int attackOVR, int defenseOVR, int quickSellValue) : Card(name), playerId(playerCount++)
-{
-    this->attackOVR = attackOVR;
-    this->defenseOVR = defenseOVR;
-    this->quickSellValue = quickSellValue;
-}
-
-PlayerCard::PlayerCard(const PlayerCard& obj) : Card(obj), playerId(playerCount++)
-{
-    this->attackOVR = obj.attackOVR;
-    this->defenseOVR = obj.defenseOVR;
-    this->quickSellValue = quickSellValue;
-}
-
-PlayerCard& PlayerCard::operator=(const PlayerCard& obj)
-{
-    if(this != &obj)
-    {
-        Card::operator=(obj);
-        this->attackOVR = obj.attackOVR;
-        this->defenseOVR = obj.defenseOVR;
-        this->quickSellValue = quickSellValue;
-    }
-    return *this;
-}
 
 bool isValidInteger(const std::string& str) {
     std::istringstream iss(str);
@@ -132,6 +40,100 @@ int readInt(std::istream& in)
     }
 }
 
+class Card{
+    std::string name;
+protected:
+    int quickSellValue;
+public:
+    Card(const std::string& name = "Unknown", int quickSellValue = 0);
+    Card(const Card& obj);
+    Card& operator=(const Card& obj);
+    friend std::istream& operator>>(std::istream& in, Card& obj);
+    friend std::ostream& operator<<(std::ostream& out, const Card& obj);
+    virtual ~Card() = default;
+
+    std::string getName() const { return name; }
+    virtual int getQuickSellValue() const = 0;
+};
+
+Card::Card(const std::string& name, int quickSellValue): name(name), quickSellValue(quickSellValue){}
+
+Card::Card(const Card& obj): name(obj.name), quickSellValue(obj.quickSellValue) {}
+
+Card& Card::operator=(const Card& obj)
+{
+    if(this != &obj)
+    {
+        this->name = obj.name;
+        this->quickSellValue = obj.quickSellValue;
+    }
+    return *this;
+}
+
+std::istream& operator>>(std::istream& in, Card& obj)
+{
+    std::cout << "Insert name: ";
+    std::getline(in, obj.name);
+    std::cout << "Quick sell value: ";
+    obj.quickSellValue = readInt(in);
+    return in;
+}
+
+std::ostream& operator<<(std::ostream& out, const Card& obj)
+{
+    out << "Name: " << RESET << obj.name << '\n';
+    out << "Quick sell value: " << RESET << obj.quickSellValue << '\n';
+    return out;
+}
+
+class PlayerCard: public Card
+{
+    static int playerCount;
+    const int playerId;
+    int attackOVR;
+    int defenseOVR;
+
+public:
+    PlayerCard(std::string name = "Unknown", int attackOVR = 0, int defenseOVR = 0, int quickSellValue = 0);
+    PlayerCard(const PlayerCard& obj);
+    PlayerCard& operator=(const PlayerCard& obj);
+    friend std::istream& operator>>(std::istream& in, PlayerCard& obj);
+    friend std::ostream& operator<<(std::ostream& out, const PlayerCard& obj);
+    ~PlayerCard() = default;
+
+    int getAttackOVR() const { return attackOVR; }
+    int getDefenseOVR() const { return defenseOVR; }
+    const int getPlayerId() const;
+    int calcOVR() const;
+    int getQuickSellValue() const { return quickSellValue; }
+    bool operator<(const PlayerCard& obj) const;
+};
+
+int PlayerCard::playerCount = 1;
+
+PlayerCard::PlayerCard(std::string name, int attackOVR, int defenseOVR, int quickSellValue) : Card(name, quickSellValue), playerId(playerCount++)
+{
+    this->attackOVR = attackOVR;
+    this->defenseOVR = defenseOVR;
+}
+
+PlayerCard::PlayerCard(const PlayerCard& obj) : Card(obj), playerId(playerCount++)
+{
+    this->attackOVR = obj.attackOVR;
+    this->defenseOVR = obj.defenseOVR;
+}
+
+PlayerCard& PlayerCard::operator=(const PlayerCard& obj)
+{
+    if(this != &obj)
+    {
+        Card::operator=(obj);
+        this->attackOVR = obj.attackOVR;
+        this->defenseOVR = obj.defenseOVR;
+    }
+    return *this;
+}
+
 std::istream& operator>>(std::istream& in, PlayerCard& obj)
 {
     // in >> static_cast<Card&>(obj);
@@ -141,9 +143,6 @@ std::istream& operator>>(std::istream& in, PlayerCard& obj)
 
     std::cout << "Insert defense overall: ";
     obj.defenseOVR = readInt(in);
-
-    std::cout << "Insert quick sell value: ";
-    obj.quickSellValue = readInt(in);
 
     return in;
 }
@@ -162,7 +161,6 @@ std::ostream& operator<<(std::ostream& out, const PlayerCard& obj)
     out << color << (Card&)obj;
     out << color << "Attack overall: " << RESET << obj.attackOVR << '\n';
     out << color << "Defense overall: " << RESET << obj.defenseOVR << '\n';
-    out << color << "Quick sell value: " << RESET << obj.quickSellValue << '\n';
     return out;
 }
 
@@ -175,20 +173,20 @@ bool PlayerCard::operator<(const PlayerCard& obj) const
     return (this->calcOVR() < obj.calcOVR());
 }
 
-class UseCard : public Card
+class UseCard :virtual public Card
 {
     int duration;
-
 public:
-    UseCard(std::string name = "Unknown", int duration = 0);
+    UseCard(std::string name = "Unknown", int quickSellValue = 0, int duration = 0);
     UseCard(const UseCard& obj);
     UseCard& operator=(const UseCard& obj);
     friend std::istream& operator>>(std::istream& in, UseCard& obj);
     friend std::ostream& operator<<(std::ostream& out, const UseCard& obj);
     virtual ~UseCard() = default;
+
 };
 
-UseCard::UseCard(std::string name, int duration) : Card(name)
+UseCard::UseCard(std::string name, int quickSellValue, int duration) : Card(name, quickSellValue)
 {
     this->duration = duration;
 }
@@ -229,15 +227,17 @@ class TeamUseCard : public UseCard
     std::string type;
 
 public:
-    TeamUseCard(std::string name = "Unknown", int duration = 0, int statsBoost = 0, std::string type = "None");
+    TeamUseCard(std::string name = "Unknown", int quickSellValue = 0, int duration = 0, int statsBoost = 0, std::string type = "None");
     TeamUseCard(const TeamUseCard& obj);
     TeamUseCard& operator=(const TeamUseCard& obj);
     friend std::istream& operator>>(std::istream& in, TeamUseCard& obj);
     friend std::ostream& operator<<(std::ostream& out, const TeamUseCard& obj);
     ~TeamUseCard() = default;
+
+    int getQuickSellValue() const{return quickSellValue;}
 };
 
-TeamUseCard::TeamUseCard(std::string name, int duration, int statsBoost, std::string type) : UseCard(name, duration)
+TeamUseCard::TeamUseCard(std::string name, int quickSellValue, int duration, int statsBoost, std::string type) : Card(name, quickSellValue), UseCard(name, quickSellValue, duration)
 {
     this->statsBoost = statsBoost;
     this->type = type;
@@ -280,23 +280,28 @@ std::ostream& operator<<(std::ostream& out, const TeamUseCard& obj)
 
 class PlayerUseCard: public UseCard
 {
+    int boost;
     PlayerCard* boostedPlayer;
 public:
-    PlayerUseCard(std::string name = "Unknown", int duration = 0, PlayerCard* boostedPlayer = nullptr);
+    PlayerUseCard(std::string name = "Unknown", int quickSellValue = 0, int duration = 0, int boost = 0, PlayerCard* boostedPlayer = nullptr);
     PlayerUseCard(const PlayerUseCard& obj);
     PlayerUseCard& operator=(const PlayerUseCard& obj);
     friend std::istream& operator>>(std::istream& in, PlayerUseCard& obj);
     friend std::ostream& operator<<(std::ostream& out, const PlayerUseCard& obj);
     ~PlayerUseCard();
+
+    int getQuickSellValue() const {return quickSellValue;}
 };
 
-PlayerUseCard::PlayerUseCard(std::string name, int duration, PlayerCard* boostedPlayer) : UseCard(name, duration)
+PlayerUseCard::PlayerUseCard(std::string name, int quickSellValue, int duration, int boost, PlayerCard* boostedPlayer) : Card(name, quickSellValue), UseCard(name, quickSellValue, duration)
 {
+    this->boost = boost;
     this->boostedPlayer = boostedPlayer;
 }
 
 PlayerUseCard::PlayerUseCard(const PlayerUseCard& obj) : UseCard(obj)
 {
+    this->boost = obj.boost;
     this->boostedPlayer = obj.boostedPlayer;
 }
 
@@ -305,6 +310,7 @@ PlayerUseCard& PlayerUseCard::operator=(const PlayerUseCard& obj)
     if(this != &obj)
     {
         UseCard::operator=(obj);
+        this->boost = obj.boost;
         this->boostedPlayer = obj.boostedPlayer;
     }
     return *this;
@@ -320,7 +326,8 @@ std::istream& operator>>(std::istream& in, PlayerUseCard& obj)
 std::ostream& operator<<(std::ostream& out, const PlayerUseCard& obj)
 {
     out << (UseCard&)obj;
-    out << *obj.boostedPlayer << std::endl;
+    if(obj.boostedPlayer != nullptr)
+        out << *obj.boostedPlayer << std::endl;
     return out;
 }
 
@@ -340,13 +347,16 @@ class Database
     static std::vector<const PlayerCard*> goldPlayers;
     static std::vector<const PlayerCard*> silverPlayers;
     static std::vector<const PlayerCard*> bronzePlayers;
+    static std::vector<const UseCard*> useCards;
     static void addPlayer(const PlayerCard& player);
 public:
     static void readPlayers();
+    static void readUseCards();
     static const std::vector<const PlayerCard*> getSpecialPlayers();
     static const std::vector<const PlayerCard*> getGoldPlayers();
     static const std::vector<const PlayerCard*> getSilverPlayers();
     static const std::vector<const PlayerCard*> getBronzePlayers();
+    static const std::vector<const UseCard*> getUseCards();
     virtual ~Database() = 0;
 };
 
@@ -355,6 +365,7 @@ std::vector<const PlayerCard*> Database::specialPlayers = {};
 std::vector<const PlayerCard*> Database::goldPlayers = {};
 std::vector<const PlayerCard*> Database::silverPlayers = {};
 std::vector<const PlayerCard*> Database::bronzePlayers = {};
+std::vector<const UseCard*> Database::useCards = {};
 
 void Database::addPlayer(const PlayerCard& player)
 {
@@ -433,6 +444,27 @@ void Database::readPlayers()
     fin.close();
 }
 
+void Database::readUseCards()
+{
+    UseCard* tempUseCard;
+    tempUseCard = new TeamUseCard("Special attack", 1200, 5, 100, "attack");
+    useCards.push_back(tempUseCard);
+    tempUseCard = new TeamUseCard("Special defense", 1200, 5, 100, "defense");
+    useCards.push_back(tempUseCard);
+    tempUseCard = new TeamUseCard("Gold attack", 800, 3, 50, "attack");
+    useCards.push_back(tempUseCard);
+    tempUseCard = new TeamUseCard("Gold defense", 800, 3, 50, "defense");
+    useCards.push_back(tempUseCard);
+    tempUseCard = new TeamUseCard("Silver attack", 400, 1, 25, "attack");
+    useCards.push_back(tempUseCard);
+    tempUseCard = new TeamUseCard("Silver attack", 400, 1, 25, "defense");
+    useCards.push_back(tempUseCard);
+    tempUseCard = new PlayerUseCard("Special attack", 1000, 10, 10);
+    useCards.push_back(tempUseCard);
+    tempUseCard = new PlayerUseCard("Special defense", 1000, 10, 10);
+    useCards.push_back(tempUseCard);
+}
+
 const std::vector<const PlayerCard*> Database::getSpecialPlayers(){return specialPlayers;}
 
 const std::vector<const PlayerCard*> Database::getGoldPlayers(){return goldPlayers;}
@@ -440,6 +472,8 @@ const std::vector<const PlayerCard*> Database::getGoldPlayers(){return goldPlaye
 const std::vector<const PlayerCard*> Database::getSilverPlayers(){return silverPlayers;}
 
 const std::vector<const PlayerCard*> Database::getBronzePlayers(){return bronzePlayers;}
+
+const std::vector<const UseCard*> Database::getUseCards(){return useCards;}
 
 class Game;
 
@@ -469,6 +503,7 @@ public:
     void setBudget(int budget) { this->budget = budget;}
     bool addPlayer(const PlayerCard* player);
     bool addToLineup(int playerId);
+    bool addUseCard(const UseCard* useCard);
     bool removeFromLineup(int playerId);
 
     Club operator +(int); // increases top speed
@@ -624,6 +659,17 @@ bool Club::checkPlayerInClub(int playerId)
     return false;
 }
 
+bool Club::addUseCard(const UseCard* useCard)
+{
+    for(int i = 0; i < this->useCards.size(); ++i)
+    {
+        if(useCard == this->useCards[i])
+            return false;
+    }
+    this->useCards.push_back(useCard);
+    return true;
+}
+
 class Game
 {
     std::vector<const PlayerCard*> lineup1;
@@ -729,12 +775,6 @@ void Game::setLineups(std::vector<const PlayerCard*> lineup1, std::vector<const 
 {
     this->lineup1 = lineup1;
     this->lineup2 = lineup2;
-}
-
-void gameDraw(int scoreHome, int scoreAway)
-{
-    std::cout << "\tYour Team\t" << scoreHome << " - " << scoreAway << "\t\tOpponent\n";
-
 }
 
 std::string Game::eventDraw(int team, int event) // 1 - Team 1, 2 - Team 2 || 1 - GOAL, 2 - YELLOW CARD, 3 - RED CARD
@@ -915,14 +955,15 @@ std::list<T> generatePackItems(std::string type){
         std::list<T> items(itemsShuffled.begin(), itemsShuffled.end());
         return items;
     }
-    if(typeid(T).name() == "P7UseCard")
+    if(templateName.find("usecard") != std::string::npos)
     {
-        // return items;
+        itemsShuffled = extractRandomElements<T>(Database::getUseCards(), 2);
+        std::list<T> items(itemsShuffled.begin(), itemsShuffled.end());
+        return items;
     }
     return {};
 }
 
-// //functie pt a genera pachet random ( verifici typeid daca e PlayerUseCard bagi 9 jucatori, altfel bagi 3 TeamUseCards)
 template <typename T>
 Pack<T>::Pack(std::string type)
 {
@@ -963,14 +1004,6 @@ int Pack<T>::getValue() const{
     for(auto item: this->items)
         sum += item->getQuickSellValue();
     return sum;
-}
-
-template <typename T>
-void Pack<T>::deleteElement(int index)
-{
-    auto it = this->items.begin();
-    std::advance(it, index);
-    this->items.erase(it);
 }
 
 template <typename T>
@@ -1442,44 +1475,7 @@ void Menu::gameMenu()
 int main() {
     // TeamUseCard d("sadsada", 15, 20, "Attack"), e(d);
     Database::readPlayers();
-    // std::cout << *Database::getSpecialPlayers()[0];
-    // std::unordered_map<int, const PlayerCard*> team1;
-    // std::unordered_map<int, const PlayerCard*> team2;
-    // std::vector<const PlayerCard*> lineup1;
-    // std::vector<const PlayerCard*> lineup2;
-    // std::vector<const PlayerCard*> lineup3;
-    // for(int i = 0; i < 33; i++)
-    // {
-    //     if(i < 11){
-    //         team1[i] = Database::getSpecialPlayers()[i];
-    //         lineup1.push_back(team1[i]);
-    //     }
-    //     else if(i < 22){
-    //         team2[i-11] = Database::getSpecialPlayers()[i];
-    //         lineup2.push_back(team2[i-11]);
-    //     }else{
-    //         lineup3.push_back(Database::getBronzePlayers()[i]);
-    //     }
-    // }
-    // Club club1(team1, lineup1), club2(team2, lineup2);
-    // Game game1(lineup1, lineup3);
-    // std::cout << "Lineup 1: " << game1.getTeamAttackOVR(lineup1) << " " << game1.getTeamDefenseOVR(lineup1) << '\n';
-    // std::cout << "Lineup 2: " << game1.getTeamAttackOVR(lineup2) << " " << game1.getTeamDefenseOVR(lineup2) << '\n';
-    // std::cout << "Lineup 3: " << game1.getTeamAttackOVR(lineup3) << " " << game1.getTeamDefenseOVR(lineup3) << '\n';
-    // int scoringChancesForTeamA = (int)(1.0 / (1.0 + std::exp((Game::getTeamDefenseOVR(lineup2) - Game::getTeamAttackOVR(lineup3)) / 100.0)) * 100);
-    // int scoringChancesForTeamB = (int)(1.0 / (1.0 + std::exp((Game::getTeamDefenseOVR(lineup3) - Game::getTeamAttackOVR(lineup2)) / 100.0)) * 100);
-    // std::cout << scoringChancesForTeamA << '\n';
-    // std::cout << scoringChancesForTeamB << '\n';
-    // std::cout << game1;
-    // game1.simGame();
-    // Pack<const PlayerCard*> tempPack;
-    // for(auto player: tempPack.getItems())
-    // {
-    //     std::cout << *player << '\n';
-    // }
-    // Club a;
-    // std::cin >> a;
-    // std::cout << a;
+    Database::readUseCards();
     Menu* menu;
     menu = menu->getInstance();
     try{
