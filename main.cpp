@@ -103,6 +103,8 @@ public:
 
     int getAttackOVR() const { return attackOVR; }
     int getDefenseOVR() const { return defenseOVR; }
+    void addAttackOVR(int boost) { attackOVR += boost; }
+    void addDefenseOVR(int boost) { defenseOVR += boost; }
     const int getPlayerId() const;
     int calcOVR() const;
     int getQuickSellValue() const { return quickSellValue; }
@@ -175,6 +177,8 @@ bool PlayerCard::operator<(const PlayerCard& obj) const
 
 class UseCard :virtual public Card
 {
+    static int useCardCount;
+    const int useCardId;
     int duration;
 public:
     UseCard(std::string name = "Unknown", int quickSellValue = 0, int duration = 0);
@@ -184,14 +188,19 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const UseCard& obj);
     virtual ~UseCard() = default;
 
+    int getDuration() const { return duration; }
+    const int getUseCardId() const {return useCardId;}
+    virtual void printCard() = 0;
 };
 
-UseCard::UseCard(std::string name, int quickSellValue, int duration) : Card(name, quickSellValue)
+int UseCard::useCardCount = 1;
+
+UseCard::UseCard(std::string name, int quickSellValue, int duration) : Card(name, quickSellValue), useCardId(useCardCount++)
 {
     this->duration = duration;
 }
 
-UseCard::UseCard(const UseCard& obj) : Card(obj)
+UseCard::UseCard(const UseCard& obj) : Card(obj), useCardId(useCardCount++)
 {
     this->duration = obj.duration;
 }
@@ -235,6 +244,7 @@ public:
     ~TeamUseCard() = default;
 
     int getQuickSellValue() const{return quickSellValue;}
+    void printCard();
 };
 
 TeamUseCard::TeamUseCard(std::string name, int quickSellValue, int duration, int statsBoost, std::string type) : Card(name, quickSellValue), UseCard(name, quickSellValue, duration)
@@ -278,6 +288,13 @@ std::ostream& operator<<(std::ostream& out, const TeamUseCard& obj)
     return out;
 }
 
+void TeamUseCard::printCard()
+{
+    std::cout << (UseCard&)(*this);
+    std::cout << "Stats boost: " << this->statsBoost << '\n';
+    std::cout << "Type: " << this->type << '\n';
+}
+
 class PlayerUseCard: public UseCard
 {
     int boost;
@@ -290,6 +307,7 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const PlayerUseCard& obj);
     ~PlayerUseCard();
 
+    void printCard();
     int getQuickSellValue() const {return quickSellValue;}
 };
 
@@ -320,6 +338,7 @@ std::istream& operator>>(std::istream& in, PlayerUseCard& obj)
 {
     in >> (UseCard&)obj;
     in >> *obj.boostedPlayer;
+    obj.boost = readInt(in);
     return in;
 }
 
@@ -328,7 +347,16 @@ std::ostream& operator<<(std::ostream& out, const PlayerUseCard& obj)
     out << (UseCard&)obj;
     if(obj.boostedPlayer != nullptr)
         out << *obj.boostedPlayer << std::endl;
+    out << "Boost: " << obj.boost << '\n';
     return out;
+}
+
+void PlayerUseCard::printCard()
+{
+    std::cout << (UseCard&)(*this);
+    if(this->boostedPlayer != nullptr)
+        std::cout << *this->boostedPlayer << std::endl;
+    std::cout << "Boost: " << this->boost << '\n';
 }
 
 PlayerUseCard::~PlayerUseCard()
@@ -356,6 +384,7 @@ public:
     static const std::vector<const PlayerCard*> getGoldPlayers();
     static const std::vector<const PlayerCard*> getSilverPlayers();
     static const std::vector<const PlayerCard*> getBronzePlayers();
+    static const UseCard* getUseCard(int id);
     static const std::vector<const UseCard*> getUseCards();
     virtual ~Database() = 0;
 };
@@ -475,6 +504,16 @@ const std::vector<const PlayerCard*> Database::getBronzePlayers(){return bronzeP
 
 const std::vector<const UseCard*> Database::getUseCards(){return useCards;}
 
+const UseCard* Database::getUseCard(int id)
+{
+    for(int i = 0; i < useCards.size(); i++)
+    {
+        if(useCards[i]->getUseCardId() == id)
+            return useCards[i];
+    }
+    return nullptr;
+}
+
 class Game;
 
 class Club
@@ -499,12 +538,21 @@ public:
     bool checkPlayerInClub(int playerId);
     const std::unordered_map<int, const PlayerCard*> getAllPlayers() const { return allPlayers; }
     const std::vector<const PlayerCard*> getLineup() const {return lineup;}
+    const std::vector<const UseCard*> getUseCards() const {return useCards;}
     int getBudget() const { return budget; }
     void setBudget(int budget) { this->budget = budget;}
+    int getNumTeamUseCards() const;
+    int getNumPlayerUseCards() const;
     bool addPlayer(const PlayerCard* player);
     bool addToLineup(int playerId);
     bool addUseCard(const UseCard* useCard);
     bool removeFromLineup(int playerId);
+    bool removeFromTeam(int playerId);
+    bool findPlayerUseCard(int id);
+    bool findTeamUseCard(int id);
+
+    void saveToFile(const std::string& filename) const;
+    void loadFromFile(const std::string& filename);
 
     Club operator +(int); // increases top speed
     friend Club operator+(int, Club);
@@ -570,8 +618,8 @@ std::istream& operator>>(std::istream& in, Club& obj)
     // }
     // std::cout << "Insert budget: ";
     // obj.budget = readInt(in);
-    // obj.budget = 2000;
-    obj.budget = 200000;
+    obj.budget = 5000;
+    // obj.budget = 200000;
     return in;
 }
 
@@ -652,6 +700,20 @@ bool Club::removeFromLineup(int playerId)
     return 0;
 }
 
+bool Club::removeFromTeam(int playerId)
+{
+    try{
+        this->allPlayers.erase(playerId);
+        std::cout << "Player has been reemoved from the team!\n";
+        return 1;
+    }
+    catch(...)
+    {
+        std::cout << "Players has not been removed!\n";
+    }
+    return 0;
+}
+
 bool Club::checkPlayerInClub(int playerId)
 {
     if(this->allPlayers.find(playerId) != this->allPlayers.end())
@@ -669,6 +731,130 @@ bool Club::addUseCard(const UseCard* useCard)
     this->useCards.push_back(useCard);
     return true;
 }
+
+int Club::getNumTeamUseCards() const
+{
+    int cnt = 0;
+    for(int i = 0; i < this->useCards.size(); ++i)
+        if(dynamic_cast<const TeamUseCard*>(this->useCards[i]) != nullptr)
+            cnt++;
+    return cnt;
+}
+
+int Club::getNumPlayerUseCards() const
+{
+    int cnt = 0;
+    for(int i = 0; i < this->useCards.size(); ++i)
+        if(dynamic_cast<const PlayerUseCard*>(this->useCards[i]) != nullptr)
+            cnt++;
+    return cnt;
+}
+
+bool Club::findPlayerUseCard(int id)
+{
+    for(int i = 0; i < useCards.size(); ++i)
+        if(useCards[i]->getUseCardId() == id && dynamic_cast<const PlayerUseCard*>(useCards[i]) != nullptr)
+            return true;
+    return false;
+}
+
+bool Club::findTeamUseCard(int id)
+{
+    for(int i = 0; i < useCards.size(); ++i)
+        if(useCards[i]->getUseCardId() == id && dynamic_cast<const TeamUseCard*>(useCards[i]) != nullptr)
+            return true;
+    return false;
+}
+
+void Club::saveToFile(const std::string& filename) const {
+    std::ofstream file(filename, std::ios::binary);
+    if (!file) {
+        std::cout << "Error in opening the file." << std::endl;
+        return;
+    }
+
+    // Save the data members to the file
+    size_t nameLength = name.length();
+    file.write(reinterpret_cast<const char*>(&nameLength), sizeof(nameLength));
+    file.write(name.c_str(), nameLength * sizeof(char));
+
+    size_t numAllPlayers = allPlayers.size();
+    file.write(reinterpret_cast<const char*>(&numAllPlayers), sizeof(numAllPlayers));
+
+    for (const auto& pair : allPlayers) {
+        int playerId = pair.first;
+        file.write(reinterpret_cast<const char*>(&playerId), sizeof(playerId));
+
+        const PlayerCard* playerCard = pair.second;
+        // Write the serialized representation of the PlayerCard object
+        file.write(reinterpret_cast<const char*>(playerCard), sizeof(PlayerCard));
+    }
+
+    size_t numLineup = lineup.size();
+    file.write(reinterpret_cast<const char*>(&numLineup), sizeof(numLineup));
+    file.write(reinterpret_cast<const char*>(lineup.data()), numLineup * sizeof(const PlayerCard*));
+
+    size_t numUseCards = useCards.size();
+    file.write(reinterpret_cast<const char*>(&numUseCards), sizeof(numUseCards));
+    file.write(reinterpret_cast<const char*>(useCards.data()), numUseCards * sizeof(const UseCard*));
+
+    file.write(reinterpret_cast<const char*>(&budget), sizeof(budget));
+
+    file.close();
+    }
+
+    // Deserialization function to read the Club object from a file
+void Club::loadFromFile(const std::string& filename) {
+        std::ifstream file(filename, std::ios::binary);
+        if (!file) {
+            std::cout << "File not found or error in opening the file." << std::endl;
+            return;
+        }
+
+        // Clear the existing data
+        name.clear();
+        allPlayers.clear();
+        lineup.clear();
+        useCards.clear();
+
+        // Read the data members from the file
+        size_t nameLength;
+        file.read(reinterpret_cast<char*>(&nameLength), sizeof(nameLength));
+
+        char* nameBuffer = new char[nameLength + 1]; // +1 for null terminator
+        file.read(nameBuffer, nameLength * sizeof(char));
+        nameBuffer[nameLength] = '\0';
+        name = nameBuffer;
+        delete[] nameBuffer;
+
+        size_t numAllPlayers;
+        file.read(reinterpret_cast<char*>(&numAllPlayers), sizeof(numAllPlayers));
+
+        for (size_t i = 0; i < numAllPlayers; ++i) {
+            int playerId;
+            file.read(reinterpret_cast<char*>(&playerId), sizeof(playerId));
+
+            PlayerCard* playerCard = new PlayerCard();
+            // Read the serialized representation of the PlayerCard object
+            file.read(reinterpret_cast<char*>(playerCard), sizeof(PlayerCard));
+
+            allPlayers[playerId] = playerCard;
+        }
+
+        size_t numLineup;
+        file.read(reinterpret_cast<char*>(&numLineup), sizeof(numLineup));
+        lineup.resize(numLineup);
+        file.read(reinterpret_cast<char*>(lineup.data()), numLineup * sizeof(const PlayerCard*));
+
+        size_t numUseCards;
+        file.read(reinterpret_cast<char*>(&numUseCards), sizeof(numUseCards));
+        useCards.resize(numUseCards);
+        file.read(reinterpret_cast<char*>(useCards.data()), numUseCards * sizeof(const UseCard*));
+
+        file.read(reinterpret_cast<char*>(&budget), sizeof(budget));
+
+        file.close();
+    }
 
 class Game
 {
@@ -955,12 +1141,12 @@ std::list<T> generatePackItems(std::string type){
         std::list<T> items(itemsShuffled.begin(), itemsShuffled.end());
         return items;
     }
-    if(templateName.find("usecard") != std::string::npos)
-    {
-        itemsShuffled = extractRandomElements<T>(Database::getUseCards(), 2);
-        std::list<T> items(itemsShuffled.begin(), itemsShuffled.end());
-        return items;
-    }
+    // if(templateName.find("usecard") != std::string::npos)
+    // {
+    //     itemsShuffled = extractRandomElements<T>(Database::getUseCards(), 2);
+    //     std::list<T> items(itemsShuffled.begin(), itemsShuffled.end());
+    //     return items;
+    // }
     return {};
 }
 
@@ -1026,6 +1212,8 @@ class Menu
     std::string filename;
     Club* club;
     Game* game;
+    // std::unordered_map<int, int> boostedPlayers; // from PlayerCard id to duration of boost, when it gets to 0 it will be deleted from unordered map and from
+    // the club with all players and lineup
     Menu(Club* club = nullptr, std::string filename = "unknown", Game* game = nullptr);
     Menu(const Menu& obj) = delete;
     Menu& operator=(const Menu& obj) = delete;
@@ -1037,6 +1225,7 @@ public:
     void clubMenu();
     void packMenu();
     void openedPackMenu(Pack<const PlayerCard*>*);
+    void openedPackUseCardsMenu(Pack<const UseCard*>*);
     void gameMenu();
 };
 
@@ -1061,6 +1250,7 @@ Menu* Menu::getInstance()
 
 Menu::~Menu(){
     nrOfInstances--;
+    this->club->saveToFile(this->filename);
     if(nrOfInstances == 0)
         if(instance){
             delete instance;
@@ -1105,6 +1295,8 @@ void Menu::run(){
             this->club->addPlayer(extractRandomElements(Database::getSilverPlayers(), 1)[0]);
         }
         this->club->addPlayer(extractRandomElements(Database::getGoldPlayers(), 1)[0]);
+    }else{
+        this->club->loadFromFile(filename);
     }
     int command;
     bool running = true;
@@ -1130,12 +1322,6 @@ void Menu::run(){
                 this->gameMenu();
                 break;
             }
-            // case 4:{
-            //     break;
-            // }
-            // case 5:{
-            //     break;
-            // }
             case 0:{
                 running = false;
                 break;
@@ -1148,7 +1334,7 @@ void Menu::run(){
     }
 }
 
-void Menu::clubMenu() // BAGA CASE SA POTI DA QUICK SELL DUPA ID
+void Menu::clubMenu()
 {
     int command;
     bool running = true;
@@ -1157,10 +1343,11 @@ void Menu::clubMenu() // BAGA CASE SA POTI DA QUICK SELL DUPA ID
         system("clear");
         std::cout << "1 - Show club!\n";
         std::cout << "2 - View all players!\n";
-        std::cout << "3 - View lineup!\n"; // in view lineup iti vezi si total attack ovr si total defense ovr
+        std::cout << "3 - View lineup!\n";
         std::cout << "4 - Add to lineup!\n";
         std::cout << "5 - Remove from lineup!\n";
         std::cout << "6 - Random lineup!\n";
+        // std::cout << "7 - Choose player for boost!\n";
         std::cout << "0 - Quit!\n";
         command = readInt(std::cin);
         switch(command)
@@ -1225,6 +1412,49 @@ void Menu::clubMenu() // BAGA CASE SA POTI DA QUICK SELL DUPA ID
                 for(auto player: this->club->getAllPlayers())
                     this->club->addToLineup(player.first);
             }
+            // case 7:{
+            //     system("clear");
+            //     if(this->club->getNumPlayerUseCards() == 0)
+            //         break;
+            //     int useCardId;
+            //     std::cout << "Insert use card id: ";
+            //     while(true){
+            //         useCardId = readInt(std::cin);
+            //         if(useCardId == 0)
+            //             break;
+            //         if(this->club->findPlayerUseCard(useCardId))
+            //             break;
+            //         std::cout << "Try again!\n";
+            //     }
+            //     if(useCardId == 0)
+            //         break;
+            //     int playerId;
+            //     std::cout << "Insert player id: ";
+            //     while(true)
+            //     {
+            //         playerId = readInt(std::cin);
+            //         if(playerId == 0)
+            //             break;
+            //         if(this->club->getAllPlayers().find(playerId) != this->club->getAllPlayers().end())
+            //             break;
+            //         std::cout << "Try again!\n";
+            //     }
+            //     if(playerId == 0)
+            //         break;
+            //     if(Database::getUseCard(useCardId)->getName() == "Special attack")
+            //     {
+            //         const PlayerCard* boostedPlayer = new PlayerCard(this->club->getAllPlayers().at(playerId)->getName(), this->club->getAllPlayers().at(playerId)->getAttackOVR() + 10,
+            //                                          this->club->getAllPlayers().at(playerId)->getDefenseOVR(), this->club->getAllPlayers().at(playerId)->getQuickSellValue());
+            //         boostedPlayers[boostedPlayer->getPlayerId()] = Database::getUseCard(useCardId)->getDuration();
+                    
+            //     } else
+            //     {
+            //         const PlayerCard* boostedPlayer = new PlayerCard(this->club->getAllPlayers().at(playerId)->getName(), this->club->getAllPlayers().at(playerId)->getAttackOVR(),
+            //                                          this->club->getAllPlayers().at(playerId)->getDefenseOVR() + 10, this->club->getAllPlayers().at(playerId)->getQuickSellValue());
+            //         boostedPlayers[boostedPlayer->getPlayerId()] = Database::getUseCard(useCardId)->getDuration();
+            //     }
+            //     break;
+            // }
             case 0:{
                 running = false;
                 break;
@@ -1251,7 +1481,7 @@ void Menu::packMenu()
         std::cout << "2 - Gold pack - 20.000\n";
         std::cout << "3 - Silver pack - 10.000\n";
         std::cout << "4 - Bronze pack - 5.000\n";
-        std::cout << "5 - Use cards - 100.000\n";
+        // std::cout << "5 - Use cards - 100.000\n";
         std::cout << "0 - Quit!\n";
         command = readInt(std::cin);
         switch(command)
@@ -1304,18 +1534,18 @@ void Menu::packMenu()
                 waitForUserInput();
                 break;
             }
-            case 5:{
-                system("clear");
-                if(this->club->getBudget() < 100000)
-                    std::cout << "Insufficient funds!";
-                else{
-                this->club->setBudget(this->club->getBudget() - 100000);
-                // useCardPack = new Pack<const UseCard*>("");
-                // this->openedPackMenu(useCardPack); // NECESITA MODIFICARI INTRUCAT NU MERGE ASTFEL
-                }
-                waitForUserInput();
-                break;
-            }
+            // case 5:{
+            //     system("clear");
+            //     if(this->club->getBudget() < 100000)
+            //         std::cout << "Insufficient funds!";
+            //     else{
+            //     this->club->setBudget(this->club->getBudget() - 100000);
+            //     useCardPack = new Pack<const UseCard*>("");
+            //     this->openedPackUseCardsMenu(useCardPack);
+            //     }
+            //     waitForUserInput();
+            //     break;
+            // }
             case 0:{
                 running = false;
                 break;
@@ -1348,7 +1578,6 @@ void Menu::openedPackMenu(Pack<const PlayerCard*>* playerPack)
                     if(this->club->getAllPlayers().find(player->getPlayerId()) == this->club->getAllPlayers().end()) // If the player is not already in the club we remove it from the pack and add it to the club
                     {
                         this->club->addPlayer(player);
-                        // playerPack->deleteElement(index);
                     }
                     else {
                         tempList.push_back(player);
@@ -1373,11 +1602,47 @@ void Menu::openedPackMenu(Pack<const PlayerCard*>* playerPack)
     }
 }
 
+// void Menu::openedPackUseCardsMenu(Pack<const UseCard*>* useCardPack)
+// {
+//     system("clear");
+//     std::list<const UseCard*> tempList;
+//     int commandPack;
+//     while(!useCardPack->getItems().empty())
+//     {
+//         tempList = {};
+//         std::cout << *useCardPack << '\n';
+//         std::cout << "1 - Store all items in the club!\n";
+//         std::cout << "2 - Quick sell all items for " << useCardPack->getValue() << "!\n";
+//         commandPack = readInt(std::cin);
+//         switch(commandPack){
+//             case 1:{
+//                 int index = 0;
+//                 for(auto useCard: useCardPack->getItems())
+//                 {
+//                     if(this->club->addUseCard(useCard) == false);
+//                      tempList.push_back(useCard);
+//                 }
+//                 useCardPack->setItems(tempList);
+//                 break;
+//             }
+//             case 2:{
+//                 for(auto useCard: useCardPack->getItems())
+//                 {
+//                     this->club->setBudget(this->club->getBudget() + useCard->getQuickSellValue());
+//                 }
+//                 useCardPack->setItems(tempList);
+//                 break;
+//             }
+//             default:{
+//                 std::cout << "Invalid command!\n";
+//                 break;
+//             }
+//         }
+//     }
+// }
+
 void Menu::gameMenu()
 {
-    // verifica ca in lineup sunt 11 jucatori altfel da-l afara
-    // dai optiunea 0 sa se intoarca inapoi fara sa joace
-    // implementeaza o suma de bani pt win
     int command;
     bool running = true;
     int result;
@@ -1407,6 +1672,18 @@ void Menu::gameMenu()
                         this->club->setBudget(this->club->getBudget() + 500);
                     else if(result == 2)
                         this->club->setBudget(this->club->getBudget() + 100);
+                    // for(auto player: this->club->getLineup())
+                    // {
+                    //     if(boostedPlayers[player->getPlayerId()] > 0)
+                    //     {
+                    //         boostedPlayers[player->getPlayerId()]--;
+                    //         if(boostedPlayers[player->getPlayerId()] == 0)
+                    //         {
+                    //             this->club->removeFromLineup(player->getPlayerId());
+                    //             this->club->removeFromTeam(player->getPlayerId());
+                    //         }
+                    //     }
+                    // }
                     waitForUserInput();
                     running = false;
                     break;
@@ -1422,6 +1699,18 @@ void Menu::gameMenu()
                         this->club->setBudget(this->club->getBudget() + 1500);
                     else if(result == 2)
                         this->club->setBudget(this->club->getBudget() + 250);
+                    // for(auto player: this->club->getLineup())
+                    // {
+                    //     if(boostedPlayers[player->getPlayerId()] > 0)
+                    //     {
+                    //         boostedPlayers[player->getPlayerId()]--;
+                    //         if(boostedPlayers[player->getPlayerId()] == 0)
+                    //         {
+                    //             this->club->removeFromLineup(player->getPlayerId());
+                    //             this->club->removeFromTeam(player->getPlayerId());
+                    //         }
+                    //     }
+                    // }
                     waitForUserInput();
                     running = false;
                     break;
@@ -1437,6 +1726,18 @@ void Menu::gameMenu()
                         this->club->setBudget(this->club->getBudget() + 3000);
                     else if(result == 2)
                         this->club->setBudget(this->club->getBudget() + 350);
+                    // for(auto player: this->club->getLineup())
+                    // {
+                    //     if(boostedPlayers[player->getPlayerId()] > 0)
+                    //     {
+                    //         boostedPlayers[player->getPlayerId()]--;
+                    //         if(boostedPlayers[player->getPlayerId()] == 0)
+                    //         {
+                    //             this->club->removeFromLineup(player->getPlayerId());
+                    //             this->club->removeFromTeam(player->getPlayerId());
+                    //         }
+                    //     }
+                    // }
                     waitForUserInput();
                     running = false;
                     break;
@@ -1452,7 +1753,20 @@ void Menu::gameMenu()
                         this->club->setBudget(this->club->getBudget() + 5000);
                     else if(result == 2)
                         this->club->setBudget(this->club->getBudget() + 450);
+                    // for(auto player: this->club->getLineup())
+                    // {
+                    //     if(boostedPlayers[player->getPlayerId()] > 0)
+                    //     {
+                    //         boostedPlayers[player->getPlayerId()]--;
+                    //         if(boostedPlayers[player->getPlayerId()] == 0)
+                    //         {
+                    //             this->club->removeFromLineup(player->getPlayerId());
+                    //             this->club->removeFromTeam(player->getPlayerId());
+                    //         }
+                    //     }
+                    // }
                     waitForUserInput();
+                    //delete game
                     running = false;
                     break;
                 }
@@ -1465,7 +1779,8 @@ void Menu::gameMenu()
                     break;
                 }
             }
-        }
+        }// testeaza dupa meci daca aveai pe cineva in lineup care era boosted ca sa ii dai duration -- (dupa ce dai duration -- verifici daca a ajuns la 0)
+        // caz in care ii dai delete din allPlayers
     else{
         std::cout << "Lineup incomplete!\n";
         waitForUserInput();
@@ -1487,11 +1802,3 @@ int main() {
     }
     return 0;
 }
-// testeaza daca red card-ul iti va scoate playerul din lineup si din Club
-
-// in meniu ai optiune sa iti vezi clubul -> vezi nr de playerii pe care ii ai ( dupa ai optiune sa vezi toti playerii pe care ii ai)
-// ai o optiune de quick sell si te intreaba sa ii dai id-ul
-// ai un meniu de packuri unde ai iduri de selectat ce pack vrei sa cumperi
-// cand ai selectat ce pack vrei sa cumperi iti face o animatie de o secunde de Loading transaction. . .
-// Dupa ce ai cumparat pachetul iti arata tot ce ti-a picat si vei avea optiunile 1. Quick sell all, 2. Store all in club, 3. Store Player Id in club
-// Daca ai selectat sa-i dai unui player boost te las sa ii ai pe amandoi in club ( cel neebostat si cel boostat) dar in lineup ai voie sa ai unul singur
